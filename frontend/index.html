@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Brent Spread Dashboard</title>
+    <link rel="stylesheet" href="static/style.css">
+    <!-- Chart.js + Zoom plugin -->
+    <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8/hammer.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
+</head>
+<body>
+    <header>
+        <h1>Brent Spread Dashboard</h1>
+        <div class="timeframe-switcher">
+            <button data-tf="5m" class="tf-btn active">5m</button>
+            <button data-tf="15m" class="tf-btn">15m</button>
+            <button data-tf="60m" class="tf-btn">1h</button>
+        </div>
+    </header>
+
+    <section class="prices">
+        <div class="venue-card" id="moex-card">
+            <h2>MOEX <span class="symbol">BMK6</span></h2>
+            <div class="row">
+                <span class="label">Best Bid</span>
+                <span class="value" id="moex-bid">—</span>
+            </div>
+            <div class="row">
+                <span class="label">Best Ask</span>
+                <span class="value" id="moex-ask">—</span>
+            </div>
+            <div class="row">
+                <span class="label">Mid</span>
+                <span class="value" id="moex-mid">—</span>
+            </div>
+            <div class="fallback-note" id="moex-fallback"></div>
+        </div>
+
+        <div class="venue-card" id="hl-card">
+            <h2>Hyperliquid <span class="symbol">xyz:BRENTOIL</span></h2>
+            <div class="row">
+                <span class="label">Best Bid</span>
+                <span class="value" id="hl-bid">—</span>
+            </div>
+            <div class="row">
+                <span class="label">Best Ask</span>
+                <span class="value" id="hl-ask">—</span>
+            </div>
+            <div class="row">
+                <span class="label">Mid</span>
+                <span class="value" id="hl-mid">—</span>
+            </div>
+            <div class="fallback-note" id="hl-fallback"></div>
+        </div>
+
+        <div class="spread-card">
+            <h2>Current Spread</h2>
+            <div class="big-value" id="current-spread">—</div>
+            <div class="unit">%</div>
+            <div class="updated" id="last-updated">Updated: —</div>
+        </div>
+    </section>
+
+    <section class="chart-section">
+        <h3>Historical Spread %</h3>
+        <div class="chart-wrap">
+            <canvas id="spreadChart"></canvas>
+        </div>
+    </section>
+
+    <section class="chart-section">
+        <h3>Z-Score <span class="z-window">(window 50)</span></h3>
+        <div class="chart-wrap">
+            <canvas id="zscoreChart"></canvas>
+        </div>
+    </section>
+
+    <script src="static/app.js"></script>
+</body>
+</html>
