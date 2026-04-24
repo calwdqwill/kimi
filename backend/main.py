@@ -20,7 +20,7 @@ import database
 from config import (
     BASE_DIR, TIMEFRAMES, ZSCORE_WINDOW, DEFAULT_CONTRACTS,
 )
-from clients import finam_client, hl_client
+from clients import alor_client, hl_client
 from domain import sync, spread, zscore, stats as stats_module
 
 _POLL_EXECUTOR = concurrent.futures.ThreadPoolExecutor(max_workers=4, thread_name_prefix="poll_")
@@ -57,11 +57,11 @@ def _poll_contract(contract: dict) -> None:
     moex_symbol = contract["moex_symbol"]
     hl_coin = contract["hl_coin"]
 
-    def _fetch_finam():
+    def _fetch_moex():
         try:
-            return finam_client.fetch_current(moex_symbol)
+            return alor_client.fetch_current(moex_symbol)
         except Exception as exc:
-            logger.warning("Polling Finam failed for %s: %s", contract_id, exc)
+            logger.warning("Polling Alor failed for %s: %s", contract_id, exc)
             return None
 
     def _fetch_hl():
@@ -72,22 +72,22 @@ def _poll_contract(contract: dict) -> None:
             return None
 
     # Fetch both venues in parallel
-    fut_finam = _POLL_EXECUTOR.submit(_fetch_finam)
+    fut_moex = _POLL_EXECUTOR.submit(_fetch_moex)
     fut_hl = _POLL_EXECUTOR.submit(_fetch_hl)
 
-    finam_data = fut_finam.result()
+    moex_data = fut_moex.result()
     hl_data = fut_hl.result()
 
-    if finam_data:
+    if moex_data:
         database.upsert_current(
             contract_id=contract_id,
-            source="finam",
+            source="moex",
             symbol=moex_symbol,
-            best_bid=finam_data.get("best_bid"),
-            best_ask=finam_data.get("best_ask"),
-            last_price=finam_data.get("last_price"),
-            updated_ms=finam_data.get("updated_ms") or int(time.time() * 1000),
-            meta=json.dumps({"is_orderbook": finam_data.get("is_orderbook", False)}),
+            best_bid=moex_data.get("best_bid"),
+            best_ask=moex_data.get("best_ask"),
+            last_price=moex_data.get("last_price"),
+            updated_ms=moex_data.get("updated_ms") or int(time.time() * 1000),
+            meta=json.dumps({"is_orderbook": moex_data.get("is_orderbook", False)}),
         )
 
     if hl_data:
@@ -104,7 +104,7 @@ def _poll_contract(contract: dict) -> None:
 
     # Compute and log tick
     try:
-        moex = database.get_current(contract_id, "finam", moex_symbol) or {}
+        moex = database.get_current(contract_id, "moex", moex_symbol) or {}
         hl = database.get_current(contract_id, "hyperliquid", hl_coin) or {}
         moex_mid = spread.mid(moex.get("best_bid"), moex.get("best_ask"))
         hl_mid = spread.mid(hl.get("best_bid"), hl.get("best_ask"))
@@ -114,7 +114,7 @@ def _poll_contract(contract: dict) -> None:
             # Get recent zscore for context
             z = None
             try:
-                _s = database.get_candles(contract_id, "finam", moex_symbol, "5m")
+                _s = database.get_candles(contract_id, "moex", moex_symbol, "5m")
                 _h = database.get_candles(contract_id, "hyperliquid", hl_coin, "5m")
                 _sy = sync.strict_sync(_s, _h)
                 _vals = []
@@ -229,15 +229,15 @@ def _load_historical_data(contract_id: str, moex_symbol: str, hl_coin: str, time
     lookback_ms = 20 * 24 * 60 * 60 * 1000
 
     # Finam
-    last_finam = database.get_last_timestamp(contract_id, "finam", moex_symbol, timeframe)
-    from_finam = (last_finam + 1) if last_finam else (now_ms - lookback_ms)
-    from_finam = max(from_finam, now_ms - lookback_ms)
-    if from_finam < now_ms:
-        finam_candles = finam_client.fetch_historical(moex_symbol, timeframe, from_finam, now_ms)
-        if finam_candles:
+    last_moex = database.get_last_timestamp(contract_id, "moex", moex_symbol, timeframe)
+    from_moex = (last_moex + 1) if last_moex else (now_ms - lookback_ms)
+    from_moex = max(from_moex, now_ms - lookback_ms)
+    if from_moex < now_ms:
+        alor_candles = alor_client.fetch_historical(moex_symbol, timeframe, from_moex, now_ms)
+        if alor_candles:
             rows = [
-                (contract_id, "finam", moex_symbol, timeframe, c["timestamp_ms"], c["close"])
-                for c in finam_candles
+                (contract_id, "moex", moex_symbol, timeframe, c["timestamp_ms"], c["close"])
+                for c in alor_candles
             ]
             database.insert_candles_batch(rows)
 
@@ -296,7 +296,7 @@ def get_historical(contract_id: str, timeframe: str):
 
     now_ms = int(time.time() * 1000)
     lookback_ms = 20 * 24 * 60 * 60 * 1000
-    moex = database.get_candles(contract_id, "finam", moex_symbol, timeframe, from_ms=now_ms - lookback_ms)
+    moex = database.get_candles(contract_id, "moex", moex_symbol, timeframe, from_ms=now_ms - lookback_ms)
     hl = database.get_candles(contract_id, "hyperliquid", hl_coin, timeframe, from_ms=now_ms - lookback_ms)
     synced = sync.strict_sync(moex, hl)
 
@@ -331,6 +331,40 @@ def get_historical(contract_id: str, timeframe: str):
 
 
 # ---------------------------------------------------------------------------
+# API endpoints — Raw prices
+# ---------------------------------------------------------------------------
+@app.get("/api/prices/{contract_id}/{timeframe}")
+def get_prices(contract_id: str, timeframe: str):
+    """Return synchronized raw MOEX and Hyperliquid close prices."""
+    if timeframe not in TIMEFRAMES:
+        raise HTTPException(status_code=400, detail="Unsupported timeframe")
+
+    contract = database.get_contract(contract_id)
+    if not contract:
+        raise HTTPException(status_code=404, detail="Contract not found")
+
+    moex_symbol = contract["moex_symbol"]
+    hl_coin = contract["hl_coin"]
+
+    now_ms = int(time.time() * 1000)
+    lookback_ms = 20 * 24 * 60 * 60 * 1000
+    moex = database.get_candles(contract_id, "moex", moex_symbol, timeframe, from_ms=now_ms - lookback_ms)
+    hl = database.get_candles(contract_id, "hyperliquid", hl_coin, timeframe, from_ms=now_ms - lookback_ms)
+    synced = sync.strict_sync(moex, hl)
+
+    result = []
+    for row in synced:
+        result.append(
+            {
+                "timestamp_ms": row["timestamp_ms"],
+                "moex_close": round(row["moex_close"], 4) if row["moex_close"] is not None else None,
+                "hl_close": round(row["hl_close"], 4) if row["hl_close"] is not None else None,
+            }
+        )
+    return result
+
+
+# ---------------------------------------------------------------------------
 # API endpoints — Current prices
 # ---------------------------------------------------------------------------
 @app.get("/api/current/{contract_id}")
@@ -343,7 +377,7 @@ def get_current(contract_id: str):
     moex_symbol = contract["moex_symbol"]
     hl_coin = contract["hl_coin"]
 
-    moex = database.get_current(contract_id, "finam", moex_symbol) or {}
+    moex = database.get_current(contract_id, "moex", moex_symbol) or {}
     hl = database.get_current(contract_id, "hyperliquid", hl_coin) or {}
 
     moex_bid = moex.get("best_bid")
@@ -402,7 +436,7 @@ def get_zscore(contract_id: str, timeframe: str):
 
     now_ms = int(time.time() * 1000)
     lookback_ms = 20 * 24 * 60 * 60 * 1000
-    moex = database.get_candles(contract_id, "finam", moex_symbol, timeframe, from_ms=now_ms - lookback_ms)
+    moex = database.get_candles(contract_id, "moex", moex_symbol, timeframe, from_ms=now_ms - lookback_ms)
     hl = database.get_candles(contract_id, "hyperliquid", hl_coin, timeframe, from_ms=now_ms - lookback_ms)
     synced = sync.strict_sync(moex, hl)
 
@@ -444,7 +478,7 @@ def get_stats(contract_id: str, timeframe: str):
 
     now_ms = int(time.time() * 1000)
     lookback_ms = 20 * 24 * 60 * 60 * 1000
-    moex = database.get_candles(contract_id, "finam", moex_symbol, timeframe, from_ms=now_ms - lookback_ms)
+    moex = database.get_candles(contract_id, "moex", moex_symbol, timeframe, from_ms=now_ms - lookback_ms)
     hl = database.get_candles(contract_id, "hyperliquid", hl_coin, timeframe, from_ms=now_ms - lookback_ms)
     synced = sync.strict_sync(moex, hl)
 
@@ -471,7 +505,7 @@ def get_signal(contract_id: str):
     hl_coin = contract["hl_coin"]
 
     # Get current spread
-    moex = database.get_current(contract_id, "finam", moex_symbol) or {}
+    moex = database.get_current(contract_id, "moex", moex_symbol) or {}
     hl = database.get_current(contract_id, "hyperliquid", hl_coin) or {}
     moex_mid = spread.mid(moex.get("best_bid"), moex.get("best_ask"))
     hl_mid = spread.mid(hl.get("best_bid"), hl.get("best_ask"))
@@ -484,7 +518,7 @@ def get_signal(contract_id: str):
     # Get stats from 5m for signal calculation
     now_ms = int(time.time() * 1000)
     lookback_ms = 20 * 24 * 60 * 60 * 1000
-    moex_c = database.get_candles(contract_id, "finam", moex_symbol, "5m", from_ms=now_ms - lookback_ms)
+    moex_c = database.get_candles(contract_id, "moex", moex_symbol, "5m", from_ms=now_ms - lookback_ms)
     hl_c = database.get_candles(contract_id, "hyperliquid", hl_coin, "5m", from_ms=now_ms - lookback_ms)
     synced = sync.strict_sync(moex_c, hl_c)
 

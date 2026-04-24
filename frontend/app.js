@@ -12,6 +12,7 @@ const state = {
   activeTf: '15m',
   chartMode: 'spread%',
   historicalData: [],
+  pricesData: [],
   zscoreData: [],
   stats: {},
   currentData: null,
@@ -209,7 +210,9 @@ const chart = new Chart(ctx, {
           label: (ctx) => {
             const v = ctx.parsed.y;
             if (v === null || v === undefined) return ctx.dataset.label + ': —';
-            return ctx.dataset.label + ': ' + v.toFixed(4) + (state.chartMode === 'zscore' ? 'σ' : '%');
+            if (state.chartMode === 'zscore') return ctx.dataset.label + ': ' + v.toFixed(4) + 'σ';
+            if (state.chartMode === 'prices') return ctx.dataset.label + ': $' + v.toFixed(2);
+            return ctx.dataset.label + ': ' + v.toFixed(4) + '%';
           }
         }
       }
@@ -268,26 +271,69 @@ function updateChart() {
     chart.data.datasets[0].label = 'Z-Score';
     chart.data.datasets[0].borderColor = '#a855f7';
     chart.data.datasets[0].backgroundColor = 'rgba(168,85,247,0.06)';
+    chart.data.datasets[0].fill = true;
     chart.data.datasets[1].data = zSlice.map(r => ({ x: r.timestamp_ms, y: 0 }));
     chart.data.datasets[1].label = 'Mean';
     chart.data.datasets[1].borderColor = '#f59e0b';
+    chart.data.datasets[1].borderDash = [4, 4];
+    chart.data.datasets[1].fill = false;
     chart.data.datasets[2].data = zSlice.map(r => ({ x: r.timestamp_ms, y: 2 }));
     chart.data.datasets[2].label = '+2σ';
+    chart.data.datasets[2].borderColor = 'rgba(239,68,68,0.4)';
+    chart.data.datasets[2].borderDash = [3, 4];
+    chart.data.datasets[2].fill = false;
     chart.data.datasets[3].data = zSlice.map(r => ({ x: r.timestamp_ms, y: -2 }));
     chart.data.datasets[3].label = '-2σ';
+    chart.data.datasets[3].borderColor = 'rgba(239,68,68,0.4)';
+    chart.data.datasets[3].borderDash = [3, 4];
+    chart.data.datasets[3].fill = false;
     chart.options.scales.y.ticks.callback = (v) => v.toFixed(1) + 'σ';
+  } else if (state.chartMode === 'prices') {
+    // Prices mode — raw MOEX and HL close prices
+    const pData = state.pricesData;
+    if (!pData.length) return;
+    const pStart = Math.floor(start * (pData.length / data.length));
+    const pEnd = Math.floor(end * (pData.length / data.length));
+    const pSlice = pData.slice(pStart, pEnd + 1);
+
+    chart.data.datasets[0].data = pSlice.map(r => ({ x: r.timestamp_ms, y: r.moex_close }));
+    chart.data.datasets[0].label = 'MOEX Close';
+    chart.data.datasets[0].borderColor = '#3b82f6';
+    chart.data.datasets[0].backgroundColor = 'rgba(59,130,246,0.06)';
+    chart.data.datasets[0].fill = true;
+    chart.data.datasets[1].data = pSlice.map(r => ({ x: r.timestamp_ms, y: r.hl_close }));
+    chart.data.datasets[1].label = 'HL Close';
+    chart.data.datasets[1].borderColor = '#f97316';
+    chart.data.datasets[1].backgroundColor = 'rgba(249,115,22,0.06)';
+    chart.data.datasets[1].borderDash = [];
+    chart.data.datasets[1].fill = true;
+    chart.data.datasets[2].data = [];
+    chart.data.datasets[2].label = '';
+    chart.data.datasets[3].data = [];
+    chart.data.datasets[3].label = '';
+    chart.options.scales.y.ticks.callback = (v) => '$' + v.toFixed(2);
   } else {
     // Spread % mode (default)
     chart.data.datasets[0].data = slice.map(r => ({ x: r.timestamp_ms, y: r.spread_pct }));
     chart.data.datasets[0].label = 'Spread %';
     chart.data.datasets[0].borderColor = '#22c55e';
     chart.data.datasets[0].backgroundColor = 'rgba(34,197,94,0.06)';
+    chart.data.datasets[0].fill = true;
     chart.data.datasets[1].data = slice.map(r => ({ x: r.timestamp_ms, y: r.mean }));
     chart.data.datasets[1].label = 'Mean';
     chart.data.datasets[1].borderColor = '#f59e0b';
+    chart.data.datasets[1].borderDash = [4, 4];
+    chart.data.datasets[1].fill = false;
     chart.data.datasets[2].data = slice.map(r => ({ x: r.timestamp_ms, y: r.plus_2sigma }));
     chart.data.datasets[2].label = '+2σ';
+    chart.data.datasets[2].borderColor = 'rgba(239,68,68,0.4)';
+    chart.data.datasets[2].borderDash = [3, 4];
+    chart.data.datasets[2].fill = false;
     chart.data.datasets[3].data = slice.map(r => ({ x: r.timestamp_ms, y: r.minus_2sigma }));
+    chart.data.datasets[3].label = '-2σ';
+    chart.data.datasets[3].borderColor = 'rgba(239,68,68,0.4)';
+    chart.data.datasets[3].borderDash = [3, 4];
+    chart.data.datasets[3].fill = false;
     chart.options.scales.y.ticks.callback = (v) => v.toFixed(2) + '%';
   }
 
@@ -548,8 +594,9 @@ async function refreshAll() {
 
   try {
     // Fetch in parallel — use allSettled so one slow endpoint doesn't block everything
-    const [histR, curR, zscR, statR, sigR, ticksR] = await Promise.allSettled([
+    const [histR, pricesR, curR, zscR, statR, sigR, ticksR] = await Promise.allSettled([
       api(`/api/historical/${cid}/${tf}`),
+      api(`/api/prices/${cid}/${tf}`),
       api(`/api/current/${cid}`),
       api(`/api/zscore/${cid}/${tf}`),
       api(`/api/stats/${cid}/${tf}`),
@@ -558,6 +605,7 @@ async function refreshAll() {
     ]);
 
     if (histR.status === 'fulfilled') state.historicalData = histR.value;
+    if (pricesR.status === 'fulfilled') state.pricesData = pricesR.value;
     if (curR.status === 'fulfilled') state.currentData = curR.value;
     if (zscR.status === 'fulfilled') state.zscoreData = zscR.value;
     if (statR.status === 'fulfilled') state.stats = statR.value;
@@ -572,7 +620,7 @@ async function refreshAll() {
     updateTable();
 
     // Log any rejections for debugging
-    [histR, curR, zscR, statR, sigR, ticksR].forEach((r, i) => {
+    [histR, pricesR, curR, zscR, statR, sigR, ticksR].forEach((r, i) => {
       if (r.status === 'rejected') console.error('Refresh partial fail:', i, r.reason);
     });
   } catch (e) {
@@ -591,6 +639,9 @@ function generateDemoData() {
   const avg = -4.5;
   const sd = 1.5;
 
+  const prices = [];
+  let moexPrice = 96.0;
+  let hlPrice = 90.5;
   for (let i = 0; i < HIST_SIZE; i++) {
     const ts = now - (HIST_SIZE - i) * 120000; // 2 min intervals
     // Random walk spread
@@ -603,6 +654,14 @@ function generateDemoData() {
       mean: Math.round(avg * 1000) / 1000,
       plus_2sigma: Math.round((avg + 2 * sd) * 1000) / 1000,
       minus_2sigma: Math.round((avg - 2 * sd) * 1000) / 1000,
+    });
+    // Random walk prices
+    moexPrice += (Math.random() - 0.5) * 0.15;
+    hlPrice += (Math.random() - 0.5) * 0.15;
+    prices.push({
+      timestamp_ms: ts,
+      moex_close: Math.round(moexPrice * 1000) / 1000,
+      hl_close: Math.round(hlPrice * 1000) / 1000,
     });
   }
 
@@ -665,7 +724,7 @@ function generateDemoData() {
     });
   }
 
-  return { hist, zData, stats, sig, cur, ticks };
+  return { hist, prices, zData, stats, sig, cur, ticks };
 }
 
 // =============================================================================
@@ -711,6 +770,7 @@ function useDemoData() {
   ];
   if (!state.activeContract) state.activeContract = 'bmm6';
   state.historicalData = demo.hist;
+  state.pricesData = demo.prices;
   state.zscoreData = demo.zData;
   state.stats = demo.stats;
   state.signalData = demo.sig;

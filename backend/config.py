@@ -41,12 +41,19 @@ else:
 # ---------------------------------------------------------------------------
 FINAM_TOKEN: str = os.getenv("FINAM_TOKEN", "").strip()
 FINAM_CLIENT_ID: str = os.getenv("FINAM_CLIENT_ID", "").strip()
+ALOR_REFRESH_TOKEN: str = os.getenv("ALOR_REFRESH_TOKEN", "").strip()
+ALOR_EXCHANGE: str = os.getenv("ALOR_EXCHANGE", "MOEX").strip()
 
 # Diagnostic logging
 if FINAM_TOKEN:
     logger.info("FINAM_TOKEN loaded: %s...%s (len=%d)", FINAM_TOKEN[:20], FINAM_TOKEN[-20:], len(FINAM_TOKEN))
 else:
-    logger.error("FINAM_TOKEN is EMPTY! Check your .env file at: %s", env_path_used or "NOT FOUND")
+    logger.info("FINAM_TOKEN not set (Alor mode)")
+
+if ALOR_REFRESH_TOKEN:
+    logger.info("ALOR_REFRESH_TOKEN loaded: %s...%s (len=%d)", ALOR_REFRESH_TOKEN[:20], ALOR_REFRESH_TOKEN[-20:], len(ALOR_REFRESH_TOKEN))
+else:
+    logger.error("ALOR_REFRESH_TOKEN is EMPTY! Check your .env file at: %s", env_path_used or "NOT FOUND")
 
 if not FINAM_CLIENT_ID:
     logger.warning("FINAM_CLIENT_ID not set in .env")
@@ -55,9 +62,11 @@ if not FINAM_CLIENT_ID:
 # API endpoints
 # ---------------------------------------------------------------------------
 FINAM_API_URL: str = "https://api.finam.ru/v1"
+ALOR_API_URL: str = os.getenv("ALOR_API_URL", "https://api.alor.ru")
+ALOR_OAUTH_URL: str = os.getenv("ALOR_OAUTH_URL", "https://oauth.alor.ru")
 HL_API_URL: str = "https://api.hyperliquid.xyz/info"
 
-logger.info("Using FINAM_API_URL: %s", FINAM_API_URL)
+logger.info("Using ALOR_API_URL: %s", ALOR_API_URL)
 
 # ---------------------------------------------------------------------------
 # Default contracts — shipped with the app, user can add more via API
