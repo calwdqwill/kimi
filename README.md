@@ -22,9 +22,10 @@
 
 | Метрика | Описание |
 |---------|----------|
-| **MOEX** | Текущая цена фьючерса Brent mini на MOEX (USD/bbl). Торговые часы: 10:00–23:50 МСК. |
+| **MOEX** | Текущая цена фьючерса Brent mini на MOEX (USD/bbl) через **Alor API**. Торговые часы: 10:00–23:50 МСК. |
 | **HL BRENTOIL** | Текущая цена перечного Brent на Hyperliquid (USD). Торгуется 24/7. |
 | **Spread (mid, %)** | Разница mid-price: HL − MOEX в процентах. |
+| **Prices** | Сырые цены MOEX и HL на одном графике для визуального сравнения. |
 | **Arb Spread** | Реальный исполнимый спред через bid/ask с учётом проскальзывания. |
 | **Z-Score (live)** | Текущее отклонение спреда от среднего в единицах σ. |
 | **Median** | Медиана спреда. Более устойчива к выбросам, чем среднее. |
@@ -48,15 +49,15 @@
 
 - Python 3.11+
 - Установленные пакеты: `fastapi`, `uvicorn`, `httpx`, `python-dotenv`
-- Токен Finam Trade API v1 (в файле `backend/.env`)
+- **Alor Refresh Token** (в файле `backend/.env`)
 
 ### Переменные окружения
 
 Создай файл `backend/.env`:
 
 ```env
-FINAM_TOKEN=your_finam_jwt_token
-FINAM_CLIENT_ID=your_client_id
+ALOR_REFRESH_TOKEN=your_alor_refresh_token
+ALOR_PORTFOLIO=your_portfolio_id
 ```
 
 ### Запуск сервера
@@ -82,7 +83,7 @@ http://127.0.0.1:8000
 app_clean/
 ├── backend/
 │   ├── clients/
-│   │   ├── finam_client.py      # Finam Trade API v1 клиент
+│   │   ├── alor_client.py       # Alor OpenAPI V2 клиент (MOEX данные)
 │   │   └── hl_client.py         # Hyperliquid API клиент
 │   ├── domain/
 │   │   ├── spread.py            # Расчёт спреда
@@ -106,7 +107,7 @@ app_clean/
 
 По умолчанию дашборд работает с двумя контрактами:
 
-- **BMK6** — `BMK6@RTSX` / `xyz:BRENTOIL`
-- **BMM6** — `BMM6@RTSX` / `xyz:BRENTOIL`
+- **BMK6** — `BMK6` (MOEX) / `xyz:BRENTOIL` (Hyperliquid)
+- **BMM6** — `BMM6` (MOEX) / `xyz:BRENTOIL` (Hyperliquid)
 
 Можно добавить новые контракты через кнопку «+ Добавить» в шапке.
