@@ -74,10 +74,12 @@ CREATE INDEX IF NOT EXISTS idx_tick_log_contract
 
 
 def _get_conn() -> sqlite3.Connection:
-    """Return a connection with row factory set."""
+    """Return a connection with row factory set and WAL mode enabled."""
     Path(DB_PATH).parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(str(DB_PATH), check_same_thread=False)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA synchronous=NORMAL")
     return conn
 
 
@@ -216,6 +218,7 @@ def get_candles(
     timeframe: str,
     from_ms: Optional[int] = None,
     to_ms: Optional[int] = None,
+    limit: Optional[int] = None,
 ) -> list[dict]:
     """Return ordered list of candles as dicts."""
     conn = _get_conn()
@@ -233,6 +236,9 @@ def get_candles(
             sql += " AND timestamp_ms <= ?"
             params.append(to_ms)
         sql += " ORDER BY timestamp_ms ASC"
+        if limit is not None:
+            sql += " LIMIT ?"
+            params.append(limit)
 
         cur = conn.execute(sql, params)
         return [dict(row) for row in cur.fetchall()]

@@ -23,7 +23,7 @@ TIME_FRAME_MAP = {
     "60m": "3600",
 }
 
-_CLIENT_TIMEOUT = httpx.Timeout(30.0, connect=10.0)
+_CLIENT_TIMEOUT = httpx.Timeout(10.0, connect=5.0)
 
 # ---------------------------------------------------------------------------
 # JWT caching (TTL 25 min)

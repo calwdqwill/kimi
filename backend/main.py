@@ -31,6 +31,39 @@ app = FastAPI(title="Brent Spread Dashboard — Multi-Contract")
 # Enable logging
 logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 
+# ---------------------------------------------------------------------------
+# Simple in-memory cache with TTL
+# ---------------------------------------------------------------------------
+class _TimedCache:
+    def __init__(self, default_ttl_seconds: float = 30.0):
+        self._data: dict = {}
+        self._ttl = default_ttl_seconds
+
+    def get(self, key: str):
+        entry = self._data.get(key)
+        if entry is None:
+            return None
+        if time.time() > entry["expires_at"]:
+            del self._data[key]
+            return None
+        return entry["value"]
+
+    def set(self, key: str, value, ttl: float | None = None):
+        self._data[key] = {
+            "value": value,
+            "expires_at": time.time() + (ttl if ttl is not None else self._ttl),
+        }
+
+    def invalidate(self, pattern: str | None = None):
+        if pattern is None:
+            self._data.clear()
+        else:
+            for k in list(self._data.keys()):
+                if pattern in k:
+                    del self._data[k]
+
+_API_CACHE = _TimedCache(default_ttl_seconds=30.0)
+
 
 @app.middleware("http")
 async def log_errors(request, call_next):
@@ -111,22 +144,6 @@ def _poll_contract(contract: dict) -> None:
         if moex_mid is not None and hl_mid is not None:
             sp = hl_mid - moex_mid
             sp_pct = spread.current_spread_pct(hl_mid, moex_mid)
-            # Get recent zscore for context
-            z = None
-            try:
-                _s = database.get_candles(contract_id, "moex", moex_symbol, "5m")
-                _h = database.get_candles(contract_id, "hyperliquid", hl_coin, "5m")
-                _sy = sync.strict_sync(_s, _h)
-                _vals = []
-                for r in _sy:
-                    _sp = spread.historical_spread_pct(r["hl_close"], r["moex_close"])
-                    if _sp is not None:
-                        _vals.append(_sp)
-                _zs = zscore.compute_zscore(_vals, window=ZSCORE_WINDOW)
-                if _zs and _zs[-1] is not None:
-                    z = round(_zs[-1], 4)
-            except Exception:
-                pass
 
             database.insert_tick(
                 contract_id=contract_id,
@@ -135,7 +152,7 @@ def _poll_contract(contract: dict) -> None:
                 hl_mid=round(hl_mid, 4),
                 spread=round(sp, 4),
                 spread_pct=round(sp_pct, 4),
-                zscore=z,
+                zscore=None,
             )
     except Exception as exc:
         logger.debug("Tick logging failed for %s: %s", contract_id, exc)
@@ -287,6 +304,11 @@ def get_historical(contract_id: str, timeframe: str):
     if timeframe not in TIMEFRAMES:
         raise HTTPException(status_code=400, detail="Unsupported timeframe")
 
+    cache_key = f"hist:{contract_id}:{timeframe}"
+    cached = _API_CACHE.get(cache_key)
+    if cached is not None:
+        return cached
+
     contract = database.get_contract(contract_id)
     if not contract:
         raise HTTPException(status_code=404, detail="Contract not found")
@@ -295,9 +317,9 @@ def get_historical(contract_id: str, timeframe: str):
     hl_coin = contract["hl_coin"]
 
     now_ms = int(time.time() * 1000)
-    lookback_ms = 20 * 24 * 60 * 60 * 1000
-    moex = database.get_candles(contract_id, "moex", moex_symbol, timeframe, from_ms=now_ms - lookback_ms)
-    hl = database.get_candles(contract_id, "hyperliquid", hl_coin, timeframe, from_ms=now_ms - lookback_ms)
+    lookback_ms = 7 * 24 * 60 * 60 * 1000  # 7 days for chart display
+    moex = database.get_candles(contract_id, "moex", moex_symbol, timeframe, from_ms=now_ms - lookback_ms, limit=2000)
+    hl = database.get_candles(contract_id, "hyperliquid", hl_coin, timeframe, from_ms=now_ms - lookback_ms, limit=2000)
     synced = sync.strict_sync(moex, hl)
 
     # Compute statistics for mean and sigma lines
@@ -327,6 +349,7 @@ def get_historical(contract_id: str, timeframe: str):
                     "minus_2sigma": round(avg - 2 * sd, 4),
                 }
             )
+    _API_CACHE.set(cache_key, result)
     return result
 
 
@@ -339,6 +362,11 @@ def get_prices(contract_id: str, timeframe: str):
     if timeframe not in TIMEFRAMES:
         raise HTTPException(status_code=400, detail="Unsupported timeframe")
 
+    cache_key = f"prices:{contract_id}:{timeframe}"
+    cached = _API_CACHE.get(cache_key)
+    if cached is not None:
+        return cached
+
     contract = database.get_contract(contract_id)
     if not contract:
         raise HTTPException(status_code=404, detail="Contract not found")
@@ -347,9 +375,9 @@ def get_prices(contract_id: str, timeframe: str):
     hl_coin = contract["hl_coin"]
 
     now_ms = int(time.time() * 1000)
-    lookback_ms = 20 * 24 * 60 * 60 * 1000
-    moex = database.get_candles(contract_id, "moex", moex_symbol, timeframe, from_ms=now_ms - lookback_ms)
-    hl = database.get_candles(contract_id, "hyperliquid", hl_coin, timeframe, from_ms=now_ms - lookback_ms)
+    lookback_ms = 7 * 24 * 60 * 60 * 1000  # 7 days for chart display
+    moex = database.get_candles(contract_id, "moex", moex_symbol, timeframe, from_ms=now_ms - lookback_ms, limit=2000)
+    hl = database.get_candles(contract_id, "hyperliquid", hl_coin, timeframe, from_ms=now_ms - lookback_ms, limit=2000)
     synced = sync.strict_sync(moex, hl)
 
     result = []
@@ -361,6 +389,7 @@ def get_prices(contract_id: str, timeframe: str):
                 "hl_close": round(row["hl_close"], 4) if row["hl_close"] is not None else None,
             }
         )
+    _API_CACHE.set(cache_key, result)
     return result
 
 
@@ -427,6 +456,11 @@ def get_zscore(contract_id: str, timeframe: str):
     if timeframe not in TIMEFRAMES:
         raise HTTPException(status_code=400, detail="Unsupported timeframe")
 
+    cache_key = f"zscore:{contract_id}:{timeframe}"
+    cached = _API_CACHE.get(cache_key)
+    if cached is not None:
+        return cached
+
     contract = database.get_contract(contract_id)
     if not contract:
         raise HTTPException(status_code=404, detail="Contract not found")
@@ -435,9 +469,9 @@ def get_zscore(contract_id: str, timeframe: str):
     hl_coin = contract["hl_coin"]
 
     now_ms = int(time.time() * 1000)
-    lookback_ms = 20 * 24 * 60 * 60 * 1000
-    moex = database.get_candles(contract_id, "moex", moex_symbol, timeframe, from_ms=now_ms - lookback_ms)
-    hl = database.get_candles(contract_id, "hyperliquid", hl_coin, timeframe, from_ms=now_ms - lookback_ms)
+    lookback_ms = 7 * 24 * 60 * 60 * 1000  # 7 days for chart display
+    moex = database.get_candles(contract_id, "moex", moex_symbol, timeframe, from_ms=now_ms - lookback_ms, limit=2000)
+    hl = database.get_candles(contract_id, "hyperliquid", hl_coin, timeframe, from_ms=now_ms - lookback_ms, limit=2000)
     synced = sync.strict_sync(moex, hl)
 
     spread_values = []
@@ -457,6 +491,7 @@ def get_zscore(contract_id: str, timeframe: str):
                     "zscore": round(z_values[i], 4),
                 }
             )
+    _API_CACHE.set(cache_key, result)
     return result
 
 
@@ -469,6 +504,11 @@ def get_stats(contract_id: str, timeframe: str):
     if timeframe not in TIMEFRAMES:
         raise HTTPException(status_code=400, detail="Unsupported timeframe")
 
+    cache_key = f"stats:{contract_id}:{timeframe}"
+    cached = _API_CACHE.get(cache_key)
+    if cached is not None:
+        return cached
+
     contract = database.get_contract(contract_id)
     if not contract:
         raise HTTPException(status_code=404, detail="Contract not found")
@@ -477,9 +517,9 @@ def get_stats(contract_id: str, timeframe: str):
     hl_coin = contract["hl_coin"]
 
     now_ms = int(time.time() * 1000)
-    lookback_ms = 20 * 24 * 60 * 60 * 1000
-    moex = database.get_candles(contract_id, "moex", moex_symbol, timeframe, from_ms=now_ms - lookback_ms)
-    hl = database.get_candles(contract_id, "hyperliquid", hl_coin, timeframe, from_ms=now_ms - lookback_ms)
+    lookback_ms = 20 * 24 * 60 * 60 * 1000  # 20 days for stats accuracy
+    moex = database.get_candles(contract_id, "moex", moex_symbol, timeframe, from_ms=now_ms - lookback_ms, limit=5000)
+    hl = database.get_candles(contract_id, "hyperliquid", hl_coin, timeframe, from_ms=now_ms - lookback_ms, limit=5000)
     synced = sync.strict_sync(moex, hl)
 
     spread_values = []
@@ -488,7 +528,9 @@ def get_stats(contract_id: str, timeframe: str):
         if sp is not None:
             spread_values.append(sp)
 
-    return stats_module.compute_all(spread_values)
+    result = stats_module.compute_all(spread_values)
+    _API_CACHE.set(cache_key, result)
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -497,6 +539,11 @@ def get_stats(contract_id: str, timeframe: str):
 @app.get("/api/signal/{contract_id}")
 def get_signal(contract_id: str):
     """Return current entry signal based on latest spread and stats."""
+    cache_key = f"signal:{contract_id}"
+    cached = _API_CACHE.get(cache_key)
+    if cached is not None:
+        return cached
+
     contract = database.get_contract(contract_id)
     if not contract:
         raise HTTPException(status_code=404, detail="Contract not found")
@@ -518,8 +565,8 @@ def get_signal(contract_id: str):
     # Get stats from 5m for signal calculation
     now_ms = int(time.time() * 1000)
     lookback_ms = 20 * 24 * 60 * 60 * 1000
-    moex_c = database.get_candles(contract_id, "moex", moex_symbol, "5m", from_ms=now_ms - lookback_ms)
-    hl_c = database.get_candles(contract_id, "hyperliquid", hl_coin, "5m", from_ms=now_ms - lookback_ms)
+    moex_c = database.get_candles(contract_id, "moex", moex_symbol, "5m", from_ms=now_ms - lookback_ms, limit=5000)
+    hl_c = database.get_candles(contract_id, "hyperliquid", hl_coin, "5m", from_ms=now_ms - lookback_ms, limit=5000)
     synced = sync.strict_sync(moex_c, hl_c)
 
     spread_values = []
@@ -537,6 +584,7 @@ def get_signal(contract_id: str):
     sig["avg"] = s["avg"]
     sig["entry_low"] = s["entry_low"]
     sig["entry_high"] = s["entry_high"]
+    _API_CACHE.set(cache_key, sig, ttl=10.0)
     return sig
 
 

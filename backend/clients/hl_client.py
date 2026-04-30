@@ -20,7 +20,7 @@ TIME_FRAME_MAP = {
     "60m": "1h",
 }
 
-_CLIENT_TIMEOUT = httpx.Timeout(30.0, connect=10.0)
+_CLIENT_TIMEOUT = httpx.Timeout(10.0, connect=5.0)
 
 
 def _post(payload: dict) -> Optional[dict]:
