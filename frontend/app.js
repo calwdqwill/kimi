@@ -23,6 +23,8 @@ const state = {
   rangeEnd: 0,      // index into historicalData
   isDragging: null, // 'left' | 'right' | null
   pollInterval: null,
+  isOnline: true,
+  consecutiveFails: 0,
 };
 
 // =============================================================================
@@ -54,10 +56,25 @@ function fmtDate(ms) {
 // =============================================================================
 // API
 // =============================================================================
-async function api(path) {
-  const r = await fetch(path);
-  if (!r.ok) throw new Error(`${path}: ${r.status}`);
-  return r.json();
+async function api(path, retries = 2) {
+  const timeoutMs = 8000;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), timeoutMs);
+      const r = await fetch(path, {
+        signal: controller.signal,
+        cache: 'no-store',
+      });
+      clearTimeout(timer);
+      if (!r.ok) throw new Error(`${path}: ${r.status}`);
+      return r.json();
+    } catch (err) {
+      if (attempt === retries) throw err;
+      // Exponential backoff: 300ms, 600ms
+      await new Promise(res => setTimeout(res, 300 * (attempt + 1)));
+    }
+  }
 }
 
 async function loadContracts() {
@@ -619,12 +636,44 @@ async function refreshAll() {
     updateSliderUI();
     updateTable();
 
+    // Track connection health
+    const failures = [histR, pricesR, curR, zscR, statR, sigR, ticksR].filter(r => r.status === 'rejected').length;
+    if (failures === 7) {
+      state.consecutiveFails++;
+    } else {
+      state.consecutiveFails = 0;
+    }
+    const wasOnline = state.isOnline;
+    state.isOnline = state.consecutiveFails < 3;
+    if (wasOnline !== state.isOnline) updateConnectionStatus();
+
     // Log any rejections for debugging
     [histR, pricesR, curR, zscR, statR, sigR, ticksR].forEach((r, i) => {
       if (r.status === 'rejected') console.error('Refresh partial fail:', i, r.reason);
     });
   } catch (e) {
     console.error('Refresh failed:', e);
+    state.consecutiveFails++;
+    const wasOnline = state.isOnline;
+    state.isOnline = state.consecutiveFails < 3;
+    if (wasOnline !== state.isOnline) updateConnectionStatus();
+  }
+}
+
+function updateConnectionStatus() {
+  const dot = document.querySelector('.live-dot');
+  const text = document.querySelector('.live-text');
+  if (!dot || !text) return;
+  if (state.isOnline) {
+    dot.style.background = '#22c55e';
+    dot.style.boxShadow = '0 0 6px #22c55e';
+    text.textContent = 'LIVE';
+    text.style.color = '#22c55e';
+  } else {
+    dot.style.background = '#ef4444';
+    dot.style.boxShadow = '0 0 6px #ef4444';
+    text.textContent = 'OFFLINE';
+    text.style.color = '#ef4444';
   }
 }
 
@@ -743,11 +792,11 @@ async function init() {
     useDemoData();
   }
 
-  // Start polling every 2 seconds (will keep trying API)
+  // Start polling every 5 seconds (will keep trying API)
   state.pollInterval = setInterval(async () => {
     try { await refreshAll(); }
     catch (e) { /* silent fail, keep showing last data */ }
-  }, 2000);
+  }, 5000);
 
   // Session timer
   setInterval(() => {
