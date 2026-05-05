@@ -255,46 +255,55 @@ body {
 /* Reset browser defaults for asset tabs */
 .asset-tabs button.asset-tab {
   all: unset;
+  appearance: none;
+  -webkit-appearance: none;
   box-sizing: border-box;
-  padding: 7px 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 28px;
   font-family: var(--font-ui);
-  font-size: 13px;
-  font-weight: 600;
+  font-size: 14px;
+  font-weight: 700;
   color: var(--text-secondary);
-  background: var(--bg-sink);
+  background: var(--bg-surface-raised);
   border: 1px solid var(--border-subtle);
-  border-radius: 8px;
+  border-radius: 10px;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all 0.2s ease;
   text-transform: uppercase;
-  letter-spacing: 0.3px;
-  min-width: 100px;
+  letter-spacing: 0.5px;
+  min-width: 140px;
+  height: 42px;
   text-align: center;
+  user-select: none;
 }
 
 .asset-tabs button.asset-tab:hover {
   color: var(--text-primary);
   border-color: var(--border-hover);
-  background: var(--bg-surface-raised);
+  background: var(--bg-surface-highest);
+  transform: translateY(-1px);
 }
 
 .asset-tabs button.asset-tab.active {
-  color: var(--text-primary);
-  background: var(--accent-blue-dim);
+  color: #fff;
+  background: var(--accent-blue);
   border-color: var(--accent-blue);
-  box-shadow: 0 0 12px rgba(59,130,246,0.15);
+  box-shadow: 0 4px 16px rgba(59,130,246,0.35);
 }
 
 .asset-tabs button.asset-tab.active.gold {
-  background: rgba(245,158,11,0.15);
+  background: #f59e0b;
   border-color: #f59e0b;
-  box-shadow: 0 0 12px rgba(245,158,11,0.15);
+  box-shadow: 0 4px 16px rgba(245,158,11,0.35);
 }
 
 .asset-tabs button.asset-tab.active.silver {
-  background: rgba(148,163,184,0.15);
+  background: #94a3b8;
   border-color: #94a3b8;
-  box-shadow: 0 0 12px rgba(148,163,184,0.15);
+  box-shadow: 0 4px 16px rgba(148,163,184,0.35);
 }
 
 /* ====== CONTRACT TABS (Level 2) ====== */
