@@ -329,10 +329,9 @@ def get_historical(contract_id: str, timeframe: str):
     moex_symbol = contract["moex_symbol"]
     hl_coin = contract["hl_coin"]
 
-    now_ms = int(time.time() * 1000)
     start_ms = _contract_start_ms(contract)
-    moex = database.get_candles(contract_id, "moex", moex_symbol, timeframe, from_ms=start_ms, limit=2000)
-    hl = database.get_candles(contract_id, "hyperliquid", hl_coin, timeframe, from_ms=start_ms, limit=2000)
+    moex = database.get_candles_recent(contract_id, "moex", moex_symbol, timeframe, from_ms=start_ms, limit=1500)
+    hl = database.get_candles_recent(contract_id, "hyperliquid", hl_coin, timeframe, from_ms=start_ms, limit=1500)
     synced = sync.strict_sync(moex, hl)
 
     # Compute statistics for mean and sigma lines
@@ -387,10 +386,9 @@ def get_prices(contract_id: str, timeframe: str):
     moex_symbol = contract["moex_symbol"]
     hl_coin = contract["hl_coin"]
 
-    now_ms = int(time.time() * 1000)
     start_ms = _contract_start_ms(contract)
-    moex = database.get_candles(contract_id, "moex", moex_symbol, timeframe, from_ms=start_ms, limit=2000)
-    hl = database.get_candles(contract_id, "hyperliquid", hl_coin, timeframe, from_ms=start_ms, limit=2000)
+    moex = database.get_candles_recent(contract_id, "moex", moex_symbol, timeframe, from_ms=start_ms, limit=1500)
+    hl = database.get_candles_recent(contract_id, "hyperliquid", hl_coin, timeframe, from_ms=start_ms, limit=1500)
     synced = sync.strict_sync(moex, hl)
 
     result = []
@@ -481,10 +479,9 @@ def get_zscore(contract_id: str, timeframe: str):
     moex_symbol = contract["moex_symbol"]
     hl_coin = contract["hl_coin"]
 
-    now_ms = int(time.time() * 1000)
     start_ms = _contract_start_ms(contract)
-    moex = database.get_candles(contract_id, "moex", moex_symbol, timeframe, from_ms=start_ms, limit=2000)
-    hl = database.get_candles(contract_id, "hyperliquid", hl_coin, timeframe, from_ms=start_ms, limit=2000)
+    moex = database.get_candles_recent(contract_id, "moex", moex_symbol, timeframe, from_ms=start_ms, limit=1500)
+    hl = database.get_candles_recent(contract_id, "hyperliquid", hl_coin, timeframe, from_ms=start_ms, limit=1500)
     synced = sync.strict_sync(moex, hl)
 
     spread_values = []
@@ -529,10 +526,9 @@ def get_stats(contract_id: str, timeframe: str):
     moex_symbol = contract["moex_symbol"]
     hl_coin = contract["hl_coin"]
 
-    now_ms = int(time.time() * 1000)
     start_ms = _contract_start_ms(contract)
-    moex = database.get_candles(contract_id, "moex", moex_symbol, timeframe, from_ms=start_ms, limit=5000)
-    hl = database.get_candles(contract_id, "hyperliquid", hl_coin, timeframe, from_ms=start_ms, limit=5000)
+    moex = database.get_candles_recent(contract_id, "moex", moex_symbol, timeframe, from_ms=start_ms, limit=1500)
+    hl = database.get_candles_recent(contract_id, "hyperliquid", hl_coin, timeframe, from_ms=start_ms, limit=1500)
     synced = sync.strict_sync(moex, hl)
 
     spread_values = []
@@ -576,10 +572,9 @@ def get_signal(contract_id: str):
     cur_spread = spread.current_spread_pct(hl_mid, moex_mid)
 
     # Get stats from 5m for signal calculation
-    now_ms = int(time.time() * 1000)
     start_ms = _contract_start_ms(contract)
-    moex_c = database.get_candles(contract_id, "moex", moex_symbol, "5m", from_ms=start_ms, limit=5000)
-    hl_c = database.get_candles(contract_id, "hyperliquid", hl_coin, "5m", from_ms=start_ms, limit=5000)
+    moex_c = database.get_candles_recent(contract_id, "moex", moex_symbol, "5m", from_ms=start_ms, limit=1500)
+    hl_c = database.get_candles_recent(contract_id, "hyperliquid", hl_coin, "5m", from_ms=start_ms, limit=1500)
     synced = sync.strict_sync(moex_c, hl_c)
 
     spread_values = []

@@ -269,6 +269,37 @@ def get_candles(
         conn.close()
 
 
+def get_candles_recent(
+    contract_id: str,
+    source: str,
+    symbol: str,
+    timeframe: str,
+    from_ms: Optional[int] = None,
+    limit: int = 2000,
+) -> list[dict]:
+    """Return last N candles ordered ASC (oldest first) for chart display."""
+    conn = _get_conn()
+    try:
+        sql = """
+            SELECT timestamp_ms, close
+            FROM candles
+            WHERE contract_id = ? AND source = ? AND symbol = ? AND timeframe = ?
+        """
+        params: list = [contract_id, source, symbol, timeframe]
+        if from_ms is not None:
+            sql += " AND timestamp_ms >= ?"
+            params.append(from_ms)
+        sql += " ORDER BY timestamp_ms DESC LIMIT ?"
+        params.append(limit)
+
+        cur = conn.execute(sql, params)
+        rows = [dict(row) for row in cur.fetchall()]
+        rows.reverse()  # oldest first for chart rendering
+        return rows
+    finally:
+        conn.close()
+
+
 def get_last_timestamp(
     contract_id: str,
     source: str,
