@@ -241,15 +241,23 @@ def _root() -> FileResponse:
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-def _contract_start_ms(contract: dict) -> int:
-    """Return timestamp for 1st day of contract month at 00:00 UTC."""
+def _contract_start_ms(contract: dict, now_ms: int | None = None) -> int:
+    """Return timestamp for 1st day of contract month at 00:00 UTC.
+    If the contract month is in the future, fall back to 7-day lookback
+    so we start collecting data as soon as the contract begins trading.
+    """
     month = contract.get("contract_month")
     year = contract.get("contract_year")
+    if now_ms is None:
+        now_ms = int(time.time() * 1000)
     if not month or not year:
-        # fallback to 7 days lookback
-        return int(time.time() * 1000) - 7 * 24 * 60 * 60 * 1000
+        return now_ms - 7 * 24 * 60 * 60 * 1000
     dt = datetime.datetime(year, month, 1, 0, 0, 0, tzinfo=datetime.timezone.utc)
-    return int(dt.timestamp() * 1000)
+    start_ms = int(dt.timestamp() * 1000)
+    # If contract month hasn't started yet, start collecting from 7 days ago
+    if start_ms > now_ms:
+        return now_ms - 7 * 24 * 60 * 60 * 1000
+    return start_ms
 
 
 def _load_historical_data(contract_id: str, moex_symbol: str, hl_coin: str, timeframe: str) -> None:
