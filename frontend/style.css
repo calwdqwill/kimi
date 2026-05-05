@@ -220,43 +220,81 @@ body {
   gap: 12px;
 }
 
-/* ====== ASSET TABS ====== */
+/* ====== ASSET BAR (Level 1) ====== */
+.asset-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 20px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  margin-bottom: 12px;
+}
+
+.asset-bar-inner {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.asset-label {
+  font-family: var(--font-ui);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--text-muted);
+}
+
 .asset-tabs {
   display: flex;
-  gap: 1px;
-  padding: 2px;
-  background: var(--bg-sink);
-  border: 1px solid var(--border-subtle);
-  border-radius: 8px;
+  gap: 4px;
 }
 
 .asset-tab {
-  padding: 5px 16px;
+  padding: 7px 20px;
   font-family: var(--font-ui);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
   color: var(--text-secondary);
-  background: transparent;
-  border: none;
-  border-radius: 6px;
+  background: var(--bg-sink);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
   cursor: pointer;
   transition: all 0.15s ease;
   text-transform: uppercase;
   letter-spacing: 0.3px;
+  min-width: 100px;
+  text-align: center;
 }
 
 .asset-tab:hover {
   color: var(--text-primary);
-  background: rgba(255,255,255,0.03);
+  border-color: var(--border-hover);
+  background: var(--bg-surface-raised);
 }
 
 .asset-tab.active {
   color: var(--text-primary);
   background: var(--accent-blue-dim);
-  box-shadow: inset 0 0 0 1px var(--accent-blue);
+  border-color: var(--accent-blue);
+  box-shadow: 0 0 12px rgba(59,130,246,0.15);
 }
 
-/* ====== CONTRACT TABS ====== */
+.asset-tab.active.gold {
+  background: rgba(245,158,11,0.15);
+  border-color: #f59e0b;
+  box-shadow: 0 0 12px rgba(245,158,11,0.15);
+}
+
+.asset-tab.active.silver {
+  background: rgba(148,163,184,0.15);
+  border-color: #94a3b8;
+  box-shadow: 0 0 12px rgba(148,163,184,0.15);
+}
+
+/* ====== CONTRACT TABS (Level 2) ====== */
 .contract-tabs {
   display: flex;
   gap: 1px;
