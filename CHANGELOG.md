@@ -1,37 +1,56 @@
 # Changelog
 
-## 2026-04-30 — Фикс производительности API
+## 2026-05-05 — Multi-Asset Dashboard v2
 
-### Проблема
-- `/api/historical` и `/api/prices` отвечали **8–30 секунд**.
-- Фронтенд показывал "$—", "Загрузка..." из-за таймаутов.
-- Причина: отсутствие WAL mode в SQLite, отсутствие LIMIT на выдаче, отсутствие кэширования, тяжёлые вычисления Z-Score при каждом тике.
+### Stage 1: Backend Multi-Asset Support
+- **Gold (GNM6, GNN6)** и **Silver (S1M6, S1N6)** добавлены как полноценные активы
+- Конфигурация `ASSETS` в `config.py`: brent (monthly), gold (quarterly), silver (quarterly)
+- `DEFAULT_CONTRACTS` расширен до 7 контрактов с полями `asset` и `contract_start_date`
+- Endpoint `/api/assets` возвращает конфигурацию всех активов
+- `_contract_start_ms()` поддерживает два режима: `contract_start_date` (квартальные) и `contract_month/year` (ежемесячные)
+- БД: новые колонки `asset` и `contract_start_date` в таблице `contracts`
 
-### Изменения
-1. **SQLite WAL mode** (`database.py`)
-   - `PRAGMA journal_mode=WAL`
-   - `PRAGMA synchronous=NORMAL`
-   - Чтение больше не блокируется записью.
+### Stage 2: Frontend Asset Tabs (Two-Level Navigation)
+- **Asset Bar (Level 1)** — отдельная плашка над хедером: Brent Oil / Gold / Silver
+- **Contract Tabs (Level 2)** — в хедере: контракты выбранного актива + timeframe
+- Динамические лейблы: `logoAsset`, `kpiMoexName`, `kpiMoexUnit`, `kpiHlName` меняются per asset
+- Стили: asset tabs в теме дашборда (тёмный фон, цветная подсветка active — синий/золотой/серебряный)
+- Иконки активов: ⛳ Brent, ◆ Gold, ◈ Silver
 
-2. **LIMIT на выдачу свечей** (`database.py` + `main.py`)
-   - `get_candles()` получил параметр `limit`.
-   - Графические endpoint'ы (`/api/historical`, `/api/prices`, `/api/zscore`) ограничены **7 днями / 2000 свечей**.
-   - Статистика (`/api/stats`, `/api/signal`) ограничена **20 днями / 5000 свечей**.
+### Stage 3: State Isolation Per Asset+Contract
+- Убраны глобальные `state.historicalData`, `state.pricesData` и т.д.
+- Добавлен `state.cache` с ключом `contractId|tf` — каждый контракт+таймфрейм хранит данные отдельно
+- `state.rangeState` — зум/ранж сохраняется per contract
+- При переключении контракта данные мгновенно подгружаются из кэша
+- `refreshAll()` обновляет UI только если пользователь всё ещё на том же контракте
 
-3. **In-memory кэш** (`main.py`)
-   - `_TimedCache` с TTL 30 секунд.
-   - Кэшируются `/api/historical`, `/api/prices`, `/api/zscore`, `/api/stats`, `/api/signal`.
-   - Снижает нагрузку на БД и ускоряет повторные запросы.
+### Fixes
+- **Белые кнопки asset tabs** — убран `all: unset`, добавлен explicit reset + `!important` для active
+- **Cache busting** — `style.css?v=4`, `app.js?v=multiasset6`
+- **Динамический логотип** — "BRENT SPREAD" → "GOLD SPREAD" → "SILVER SPREAD"
 
-4. **Оптимизация tick logging** (`main.py`)
-   - Убран пересчёт Z-Score при каждом тике (каждые 2 сек).
-   - Раньше: `get_candles` + `strict_sync` + `compute_zscore` для 5m при каждом poll.
-   - Теперь: `zscore=None` в `insert_tick`.
+### Git Branches
+- `dashboard-bmk-bmr` — основная ветка разработки
+- `V2_prod` — стабильная продакшн-ветка (все изменения от 2026-05-05)
 
-5. **Таймауты HTTP-клиентов** (`alor_client.py`, `hl_client.py`)
-   - Read timeout: 30 → **10 сек**
-   - Connect timeout: 10 → **5 сек**
+---
 
-### Результат
-- Все endpoint'ы отвечают **< 500 мс** (было 8–30 сек).
-- Сайт остаётся работоспособным при сбоях внешних API.
+## Pre-2026-05-05
+
+### Performance & Reliability
+- WAL mode для SQLite, LIMIT=2000, in-memory кэш (TTL 30 сек)
+- HTTP таймауты 10 сек, retry-логика в JS, polling 5 сек
+- Диагностика `ERR_CONNECTION_RESET` — VPN, retry-логика
+
+### Chart Features
+- Zoom колесиком: вверх=zoom in, правый край фиксирован, slider синхронизируется, min 96 точек
+- История с 1-го числа месяца контракта (`_contract_start_ms`)
+
+### Contracts Added
+- BMN6 (Brent July 2026)
+- GNM6/GNN6 (Gold quarterly)
+- S1M6/S1N6 (Silver quarterly)
+
+### Infrastructure
+- V1_prod — первая стабильная ветка
+- Деплой через paramiko SSH + `git pull` + `systemctl restart dashboard`
