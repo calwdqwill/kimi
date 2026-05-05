@@ -69,35 +69,118 @@ HL_API_URL: str = "https://api.hyperliquid.xyz/info"
 logger.info("Using ALOR_API_URL: %s", ALOR_API_URL)
 
 # ---------------------------------------------------------------------------
-# Default contracts — shipped with the app, user can add more via API
+# Asset configuration — multi-asset support
+# ---------------------------------------------------------------------------
+# expiry_type: "monthly" (Brent) or "quarterly" (Gold, Silver)
+# history_mode: "month_start" (1st of month) or "contract_start" (listing date)
+# ---------------------------------------------------------------------------
+ASSETS = {
+    "brent": {
+        "name": "Brent Oil",
+        "unit": "USD/bbl",
+        "lot_size": 1,
+        "price_step": 0.01,
+        "expiry_type": "monthly",
+        "expiry_day": 1,
+        "history_mode": "month_start",
+    },
+    "gold": {
+        "name": "Gold",
+        "unit": "USD/oz",
+        "lot_size": 2,
+        "price_step": 0.1,
+        "expiry_type": "quarterly",
+        "expiry_day": 19,
+        "history_mode": "contract_start",
+    },
+    "silver": {
+        "name": "Silver",
+        "unit": "USD/oz",
+        "lot_size": 1,
+        "price_step": 0.01,
+        "expiry_type": "quarterly",
+        "expiry_day": 19,
+        "history_mode": "contract_start",
+    },
+}
+
+# ---------------------------------------------------------------------------
+# Default contracts — shipped with the app
+# ---------------------------------------------------------------------------
+# contract_start_date: ISO date for quarterly contracts (Gold/Silver)
+#   when history_mode = "contract_start", history loads from this date
+# contract_month / contract_year: for monthly contracts (Brent)
+#   when history_mode = "month_start", history loads from 1st of this month
 # ---------------------------------------------------------------------------
 DEFAULT_CONTRACTS = [
+    # Brent — monthly
     {
         "id": "bmm6",
         "name": "BMM6",
+        "asset": "brent",
         "moex_symbol": "BMM6@RTSX",
         "hl_coin": "xyz:BRENTOIL",
         "is_active": True,
-        "contract_month": 5,    # май
+        "contract_month": 5,
         "contract_year": 2026,
     },
     {
         "id": "bmk6",
         "name": "BMK6",
+        "asset": "brent",
         "moex_symbol": "BMK6@RTSX",
         "hl_coin": "xyz:BRENTOIL",
         "is_active": True,
-        "contract_month": 4,    # апрель
+        "contract_month": 4,
         "contract_year": 2026,
     },
     {
         "id": "bmn6",
         "name": "BMN6",
+        "asset": "brent",
         "moex_symbol": "BMN6@RTSX",
         "hl_coin": "xyz:BRENTOIL",
         "is_active": True,
-        "contract_month": 6,    # июнь
+        "contract_month": 6,
         "contract_year": 2026,
+    },
+    # Gold — quarterly
+    {
+        "id": "gnm6",
+        "name": "GNM6",
+        "asset": "gold",
+        "moex_symbol": "GNM6@RTSX",
+        "hl_coin": "xyz:GOLD",
+        "is_active": True,
+        "contract_start_date": "2026-03-20",  # listing date approx
+    },
+    {
+        "id": "gnn6",
+        "name": "GNN6",
+        "asset": "gold",
+        "moex_symbol": "GNN6@RTSX",
+        "hl_coin": "xyz:GOLD",
+        "is_active": True,
+        "contract_start_date": "2026-06-20",  # next quarter approx
+    },
+    # Silver — quarterly
+    {
+        "id": "s1m6",
+        "name": "S1M6",
+        "asset": "silver",
+        "moex_symbol": "S1M6@RTSX",
+        "hl_coin": "xyz:SILVER",
+        "is_active": True,
+        "contract_start_date": "2026-03-20",  # listing date approx
+    },
+    {
+        "id": "s1n6",
+        "name": "S1N6",
+        "asset": "silver",
+        "moex_symbol": "S1N6@RTSX",
+        "hl_coin": "xyz:SILVER",
+        "is_active": True,
+        "contract_start_date": "2026-06-20",  # next quarter approx
     },
 ]
 

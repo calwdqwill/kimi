@@ -25,11 +25,13 @@ INIT_SQL = """
 CREATE TABLE IF NOT EXISTS contracts (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
+    asset TEXT NOT NULL DEFAULT 'brent',
     moex_symbol TEXT NOT NULL,
     hl_coin TEXT NOT NULL,
     is_active INTEGER NOT NULL DEFAULT 1,
     contract_month INTEGER NOT NULL DEFAULT 0,
     contract_year INTEGER NOT NULL DEFAULT 0,
+    contract_start_date TEXT,
     created_ms INTEGER NOT NULL
 );
 
@@ -92,33 +94,38 @@ def init_db() -> None:
         with DB_LOCK:
             conn.executescript(INIT_SQL)
             # Ensure new columns exist on older DBs
-            try:
-                conn.execute("ALTER TABLE contracts ADD COLUMN contract_month INTEGER NOT NULL DEFAULT 0")
-            except sqlite3.OperationalError:
-                pass
-            try:
-                conn.execute("ALTER TABLE contracts ADD COLUMN contract_year INTEGER NOT NULL DEFAULT 0")
-            except sqlite3.OperationalError:
-                pass
+            for col, col_type in [
+                ("contract_month", "INTEGER NOT NULL DEFAULT 0"),
+                ("contract_year", "INTEGER NOT NULL DEFAULT 0"),
+                ("asset", "TEXT NOT NULL DEFAULT 'brent'"),
+                ("contract_start_date", "TEXT"),
+            ]:
+                try:
+                    conn.execute(f"ALTER TABLE contracts ADD COLUMN {col} {col_type}")
+                except sqlite3.OperationalError:
+                    pass
 
             # Seed default contracts if none exist
             for c in DEFAULT_CONTRACTS:
                 conn.execute(
                     """
-                    INSERT OR IGNORE INTO contracts (id, name, moex_symbol, hl_coin, is_active, contract_month, contract_year, created_ms)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    INSERT OR IGNORE INTO contracts (id, name, asset, moex_symbol, hl_coin, is_active, contract_month, contract_year, contract_start_date, created_ms)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
-                    (c["id"], c["name"], c["moex_symbol"], c["hl_coin"], 1 if c.get("is_active") else 0,
+                    (c["id"], c["name"], c.get("asset", "brent"), c["moex_symbol"], c["hl_coin"],
+                     1 if c.get("is_active") else 0,
                      c.get("contract_month", 0), c.get("contract_year", 0),
+                     c.get("contract_start_date"),
                      int(__import__('time').time() * 1000)),
                 )
-                # Update existing rows with month/year from config
+                # Update existing rows with fields from config
                 conn.execute(
                     """
-                    UPDATE contracts SET contract_month = ?, contract_year = ?
-                    WHERE id = ? AND (contract_month = 0 OR contract_year = 0)
+                    UPDATE contracts SET asset = ?, contract_month = ?, contract_year = ?, contract_start_date = ?
+                    WHERE id = ?
                     """,
-                    (c.get("contract_month", 0), c.get("contract_year", 0), c["id"]),
+                    (c.get("asset", "brent"), c.get("contract_month", 0), c.get("contract_year", 0),
+                     c.get("contract_start_date"), c["id"]),
                 )
             conn.commit()
     finally:
@@ -151,18 +158,19 @@ def get_contract(contract_id: str) -> Optional[dict]:
 
 
 def add_contract(contract_id: str, name: str, moex_symbol: str, hl_coin: str,
-                   contract_month: int = 0, contract_year: int = 0) -> None:
+                   asset: str = "brent", contract_month: int = 0, contract_year: int = 0,
+                   contract_start_date: str | None = None) -> None:
     """Add a new contract."""
     conn = _get_conn()
     try:
         with DB_LOCK:
             conn.execute(
                 """
-                INSERT OR IGNORE INTO contracts (id, name, moex_symbol, hl_coin, is_active, contract_month, contract_year, created_ms)
-                VALUES (?, ?, ?, ?, 1, ?, ?, ?)
+                INSERT OR IGNORE INTO contracts (id, name, asset, moex_symbol, hl_coin, is_active, contract_month, contract_year, contract_start_date, created_ms)
+                VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?, ?)
                 """,
-                (contract_id, name, moex_symbol, hl_coin, contract_month, contract_year,
-                 int(__import__('time').time() * 1000)),
+                (contract_id, name, asset, moex_symbol, hl_coin, contract_month, contract_year,
+                 contract_start_date, int(__import__('time').time() * 1000)),
             )
             conn.commit()
     finally:

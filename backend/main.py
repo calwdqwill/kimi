@@ -242,19 +242,36 @@ def _root() -> FileResponse:
 # Helpers
 # ---------------------------------------------------------------------------
 def _contract_start_ms(contract: dict, now_ms: int | None = None) -> int:
-    """Return timestamp for 1st day of contract month at 00:00 UTC.
-    If the contract month is in the future, fall back to 7-day lookback
-    so we start collecting data as soon as the contract begins trading.
+    """Return timestamp for the start of historical data loading.
+
+    - Monthly contracts (Brent): 1st day of contract month
+    - Quarterly contracts (Gold, Silver): contract_start_date from config
+    - If date is in the future, fall back to 7-day lookback
     """
-    month = contract.get("contract_month")
-    year = contract.get("contract_year")
     if now_ms is None:
         now_ms = int(time.time() * 1000)
+
+    # Quarterly contracts: use contract_start_date (ISO format)
+    start_date = contract.get("contract_start_date")
+    if start_date:
+        try:
+            dt = datetime.datetime.strptime(start_date, "%Y-%m-%d").replace(
+                tzinfo=datetime.timezone.utc
+            )
+            start_ms = int(dt.timestamp() * 1000)
+            if start_ms > now_ms:
+                return now_ms - 7 * 24 * 60 * 60 * 1000
+            return start_ms
+        except ValueError:
+            pass  # fall through to month-based logic
+
+    # Monthly contracts: 1st day of contract month
+    month = contract.get("contract_month")
+    year = contract.get("contract_year")
     if not month or not year:
         return now_ms - 7 * 24 * 60 * 60 * 1000
     dt = datetime.datetime(year, month, 1, 0, 0, 0, tzinfo=datetime.timezone.utc)
     start_ms = int(dt.timestamp() * 1000)
-    # If contract month hasn't started yet, start collecting from 7 days ago
     if start_ms > now_ms:
         return now_ms - 7 * 24 * 60 * 60 * 1000
     return start_ms
@@ -300,6 +317,13 @@ def _load_historical_data(contract_id: str, moex_symbol: str, hl_coin: str, time
 def get_contracts():
     """Return all contracts."""
     return database.get_contracts()
+
+
+@app.get("/api/assets")
+def get_assets():
+    """Return asset configuration."""
+    from config import ASSETS
+    return ASSETS
 
 
 @app.post("/api/contracts")
