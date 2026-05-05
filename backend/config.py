@@ -78,6 +78,8 @@ DEFAULT_CONTRACTS = [
         "moex_symbol": "BMM6@RTSX",
         "hl_coin": "xyz:BRENTOIL",
         "is_active": True,
+        "contract_month": 5,    # май
+        "contract_year": 2026,
     },
     {
         "id": "bmk6",
@@ -85,6 +87,8 @@ DEFAULT_CONTRACTS = [
         "moex_symbol": "BMK6@RTSX",
         "hl_coin": "xyz:BRENTOIL",
         "is_active": True,
+        "contract_month": 4,    # апрель
+        "contract_year": 2026,
     },
     {
         "id": "bmn6",
@@ -92,6 +96,8 @@ DEFAULT_CONTRACTS = [
         "moex_symbol": "BMN6@RTSX",
         "hl_coin": "xyz:BRENTOIL",
         "is_active": True,
+        "contract_month": 6,    # июнь
+        "contract_year": 2026,
     },
 ]
 

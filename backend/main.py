@@ -6,6 +6,7 @@ Run from the backend folder:
 """
 
 import concurrent.futures
+import datetime
 import json
 import logging
 import threading
@@ -240,15 +241,27 @@ def _root() -> FileResponse:
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-def _load_historical_data(contract_id: str, moex_symbol: str, hl_coin: str, timeframe: str) -> None:
-    """Incrementally fetch and store historical candles."""
-    now_ms = int(time.time() * 1000)
-    lookback_ms = 20 * 24 * 60 * 60 * 1000
+def _contract_start_ms(contract: dict) -> int:
+    """Return timestamp for 1st day of contract month at 00:00 UTC."""
+    month = contract.get("contract_month")
+    year = contract.get("contract_year")
+    if not month or not year:
+        # fallback to 7 days lookback
+        return int(time.time() * 1000) - 7 * 24 * 60 * 60 * 1000
+    dt = datetime.datetime(year, month, 1, 0, 0, 0, tzinfo=datetime.timezone.utc)
+    return int(dt.timestamp() * 1000)
 
-    # Finam
+
+def _load_historical_data(contract_id: str, moex_symbol: str, hl_coin: str, timeframe: str) -> None:
+    """Incrementally fetch and store historical candles from contract month start."""
+    now_ms = int(time.time() * 1000)
+    contract = database.get_contract(contract_id) or {}
+    start_ms = _contract_start_ms(contract)
+
+    # MOEX (Alor)
     last_moex = database.get_last_timestamp(contract_id, "moex", moex_symbol, timeframe)
-    from_moex = (last_moex + 1) if last_moex else (now_ms - lookback_ms)
-    from_moex = max(from_moex, now_ms - lookback_ms)
+    from_moex = (last_moex + 1) if last_moex else start_ms
+    from_moex = max(from_moex, start_ms)
     if from_moex < now_ms:
         alor_candles = alor_client.fetch_historical(moex_symbol, timeframe, from_moex, now_ms)
         if alor_candles:
@@ -260,8 +273,8 @@ def _load_historical_data(contract_id: str, moex_symbol: str, hl_coin: str, time
 
     # Hyperliquid
     last_hl = database.get_last_timestamp(contract_id, "hyperliquid", hl_coin, timeframe)
-    from_hl = (last_hl + 1) if last_hl else (now_ms - lookback_ms)
-    from_hl = max(from_hl, now_ms - lookback_ms)
+    from_hl = (last_hl + 1) if last_hl else start_ms
+    from_hl = max(from_hl, start_ms)
     if from_hl < now_ms:
         hl_candles = hl_client.fetch_historical(hl_coin, timeframe, from_hl, now_ms)
         if hl_candles:
@@ -317,9 +330,9 @@ def get_historical(contract_id: str, timeframe: str):
     hl_coin = contract["hl_coin"]
 
     now_ms = int(time.time() * 1000)
-    lookback_ms = 7 * 24 * 60 * 60 * 1000  # 7 days for chart display
-    moex = database.get_candles(contract_id, "moex", moex_symbol, timeframe, from_ms=now_ms - lookback_ms, limit=2000)
-    hl = database.get_candles(contract_id, "hyperliquid", hl_coin, timeframe, from_ms=now_ms - lookback_ms, limit=2000)
+    start_ms = _contract_start_ms(contract)
+    moex = database.get_candles(contract_id, "moex", moex_symbol, timeframe, from_ms=start_ms, limit=2000)
+    hl = database.get_candles(contract_id, "hyperliquid", hl_coin, timeframe, from_ms=start_ms, limit=2000)
     synced = sync.strict_sync(moex, hl)
 
     # Compute statistics for mean and sigma lines
@@ -375,9 +388,9 @@ def get_prices(contract_id: str, timeframe: str):
     hl_coin = contract["hl_coin"]
 
     now_ms = int(time.time() * 1000)
-    lookback_ms = 7 * 24 * 60 * 60 * 1000  # 7 days for chart display
-    moex = database.get_candles(contract_id, "moex", moex_symbol, timeframe, from_ms=now_ms - lookback_ms, limit=2000)
-    hl = database.get_candles(contract_id, "hyperliquid", hl_coin, timeframe, from_ms=now_ms - lookback_ms, limit=2000)
+    start_ms = _contract_start_ms(contract)
+    moex = database.get_candles(contract_id, "moex", moex_symbol, timeframe, from_ms=start_ms, limit=2000)
+    hl = database.get_candles(contract_id, "hyperliquid", hl_coin, timeframe, from_ms=start_ms, limit=2000)
     synced = sync.strict_sync(moex, hl)
 
     result = []
@@ -469,9 +482,9 @@ def get_zscore(contract_id: str, timeframe: str):
     hl_coin = contract["hl_coin"]
 
     now_ms = int(time.time() * 1000)
-    lookback_ms = 7 * 24 * 60 * 60 * 1000  # 7 days for chart display
-    moex = database.get_candles(contract_id, "moex", moex_symbol, timeframe, from_ms=now_ms - lookback_ms, limit=2000)
-    hl = database.get_candles(contract_id, "hyperliquid", hl_coin, timeframe, from_ms=now_ms - lookback_ms, limit=2000)
+    start_ms = _contract_start_ms(contract)
+    moex = database.get_candles(contract_id, "moex", moex_symbol, timeframe, from_ms=start_ms, limit=2000)
+    hl = database.get_candles(contract_id, "hyperliquid", hl_coin, timeframe, from_ms=start_ms, limit=2000)
     synced = sync.strict_sync(moex, hl)
 
     spread_values = []
@@ -517,9 +530,9 @@ def get_stats(contract_id: str, timeframe: str):
     hl_coin = contract["hl_coin"]
 
     now_ms = int(time.time() * 1000)
-    lookback_ms = 20 * 24 * 60 * 60 * 1000  # 20 days for stats accuracy
-    moex = database.get_candles(contract_id, "moex", moex_symbol, timeframe, from_ms=now_ms - lookback_ms, limit=5000)
-    hl = database.get_candles(contract_id, "hyperliquid", hl_coin, timeframe, from_ms=now_ms - lookback_ms, limit=5000)
+    start_ms = _contract_start_ms(contract)
+    moex = database.get_candles(contract_id, "moex", moex_symbol, timeframe, from_ms=start_ms, limit=5000)
+    hl = database.get_candles(contract_id, "hyperliquid", hl_coin, timeframe, from_ms=start_ms, limit=5000)
     synced = sync.strict_sync(moex, hl)
 
     spread_values = []
@@ -564,9 +577,9 @@ def get_signal(contract_id: str):
 
     # Get stats from 5m for signal calculation
     now_ms = int(time.time() * 1000)
-    lookback_ms = 20 * 24 * 60 * 60 * 1000
-    moex_c = database.get_candles(contract_id, "moex", moex_symbol, "5m", from_ms=now_ms - lookback_ms, limit=5000)
-    hl_c = database.get_candles(contract_id, "hyperliquid", hl_coin, "5m", from_ms=now_ms - lookback_ms, limit=5000)
+    start_ms = _contract_start_ms(contract)
+    moex_c = database.get_candles(contract_id, "moex", moex_symbol, "5m", from_ms=start_ms, limit=5000)
+    hl_c = database.get_candles(contract_id, "hyperliquid", hl_coin, "5m", from_ms=start_ms, limit=5000)
     synced = sync.strict_sync(moex_c, hl_c)
 
     spread_values = []
