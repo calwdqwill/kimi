@@ -13,21 +13,50 @@ const state = {
   activeContract: null, // current contract id
   activeTf: '15m',
   chartMode: 'spread%',
-  historicalData: [],
-  pricesData: [],
-  zscoreData: [],
-  stats: {},
-  currentData: null,
+  // Per-asset+contract cache: key = "contractId|tf"
+  cache: {},
   tickCount: 0,
   sessionStart: null,
-  // Range slider state
-  rangeStart: 0,
-  rangeEnd: 0,
+  // Range slider state (per contract)
+  rangeState: {},       // key = contractId, value = { rangeStart, rangeEnd }
   isDragging: null,
   pollInterval: null,
   isOnline: true,
   consecutiveFails: 0,
 };
+
+// Cache helpers
+function cacheKey(contractId, tf) { return contractId + '|' + tf; }
+function getCache(contractId, tf) {
+  return state.cache[cacheKey(contractId, tf)] || null;
+}
+function setCache(contractId, tf, data) {
+  state.cache[cacheKey(contractId, tf)] = data;
+}
+function getCurrentCache() {
+  if (!state.activeContract) return null;
+  return getCache(state.activeContract, state.activeTf);
+}
+function getCurrentData(field) {
+  const c = getCurrentCache();
+  return c ? c[field] : null;
+}
+function setCurrentData(data) {
+  if (!state.activeContract) return;
+  setCache(state.activeContract, state.activeTf, data);
+}
+
+// Range helpers
+function getRangeState(contractId) {
+  return state.rangeState[contractId] || { rangeStart: 0, rangeEnd: 0 };
+}
+function setRangeState(contractId, rs, re) {
+  state.rangeState[contractId] = { rangeStart: rs, rangeEnd: re };
+}
+function getCurrentRange() {
+  if (!state.activeContract) return { rangeStart: 0, rangeEnd: 0 };
+  return getRangeState(state.activeContract);
+}
 
 // =============================================================================
 // UTILS
@@ -124,6 +153,23 @@ function setActiveContract(id) {
   document.getElementById('kpiMoexUnit').textContent = asset.unit || 'USD';
   document.getElementById('kpiHlName').textContent = 'Hyperliquid ' + (asset.name || '');
   renderContractTabs();
+
+  // Restore cached range for this contract
+  const rs = getRangeState(id);
+  state.rangeStart = rs.rangeStart;
+  state.rangeEnd = rs.rangeEnd;
+
+  // If we have cached data for this contract+tf, use it immediately
+  const cached = getCurrentCache();
+  if (cached) {
+    updateKPIs();
+    updateStats();
+    updateSignal();
+    updateChart();
+    updateSliderUI();
+    updateTable();
+  }
+
   refreshAll().then(() => {
     initRangeSlider();
     updateChart();
@@ -317,8 +363,10 @@ const chart = new Chart(ctx, {
 // CHART UPDATE
 // =============================================================================
 function updateChart() {
-  const data = state.historicalData;
-  if (!data.length) return;
+  const cache = getCurrentCache();
+  if (!cache) return;
+  const data = cache.historicalData;
+  if (!data || !data.length) return;
 
   // Apply range slider filtering
   const start = Math.max(0, state.rangeStart);
@@ -327,8 +375,8 @@ function updateChart() {
 
   if (state.chartMode === 'zscore') {
     // Z-Score mode
-    const zData = state.zscoreData;
-    if (!zData.length) return;
+    const zData = cache.zscoreData;
+    if (!zData || !zData.length) return;
     const zStart = Math.floor(start * (zData.length / data.length));
     const zEnd = Math.floor(end * (zData.length / data.length));
     const zSlice = zData.slice(zStart, zEnd + 1);
@@ -356,8 +404,8 @@ function updateChart() {
     chart.options.scales.y.ticks.callback = (v) => v.toFixed(1) + 'σ';
   } else if (state.chartMode === 'prices') {
     // Prices mode — raw MOEX and HL close prices
-    const pData = state.pricesData;
-    if (!pData.length) return;
+    const pData = cache.pricesData;
+    if (!pData || !pData.length) return;
     const pStart = Math.floor(start * (pData.length / data.length));
     const pEnd = Math.floor(end * (pData.length / data.length));
     const pSlice = pData.slice(pStart, pEnd + 1);
@@ -421,10 +469,20 @@ const MIN_VISIBLE_POINTS = 96;  // ~1 day on 15m (96 candles)
 const ZOOM_STEP_RATIO = 0.15;   // 15% per wheel tick
 
 function initRangeSlider() {
-  const data = state.historicalData;
-  if (!data.length) return;
-  state.rangeEnd = data.length - 1;
-  state.rangeStart = 0;  // show full chart by default
+  const cache = getCurrentCache();
+  const data = cache ? cache.historicalData : [];
+  if (!data || !data.length) return;
+  const rs = getRangeState(state.activeContract);
+  // If range was never set for this contract, default to full view
+  if (rs.rangeEnd === 0 && rs.rangeStart === 0) {
+    state.rangeEnd = data.length - 1;
+    state.rangeStart = 0;
+    setRangeState(state.activeContract, 0, data.length - 1);
+  } else {
+    state.rangeStart = rs.rangeStart;
+    state.rangeEnd = Math.min(data.length - 1, rs.rangeEnd);
+    setRangeState(state.activeContract, state.rangeStart, state.rangeEnd);
+  }
   updateSliderUI();
 }
 
@@ -433,8 +491,9 @@ function initRangeSlider() {
 // =============================================================================
 function onChartWheel(e) {
   e.preventDefault();
-  const data = state.historicalData;
-  if (!data.length) return;
+  const cache = getCurrentCache();
+  const data = cache ? cache.historicalData : [];
+  if (!data || !data.length) return;
 
   const total = data.length;
   const currentVisible = state.rangeEnd - state.rangeStart + 1;
@@ -453,14 +512,16 @@ function onChartWheel(e) {
   // Right edge fixed (user choice 2B)
   state.rangeEnd = total - 1;
   state.rangeStart = Math.max(0, state.rangeEnd - newVisible + 1);
+  setRangeState(state.activeContract, state.rangeStart, state.rangeEnd);
 
   updateSliderUI();
   updateChart();
 }
 
 function updateSliderUI() {
-  const data = state.historicalData;
-  if (!data.length) return;
+  const cache = getCurrentCache();
+  const data = cache ? cache.historicalData : [];
+  if (!data || !data.length) return;
   const total = data.length;
   const leftPct = (state.rangeStart / total) * 100;
   const rightPct = (state.rangeEnd / total) * 100;
@@ -478,30 +539,37 @@ function updateSliderUI() {
 }
 
 function onTrackClick(e) {
+  const cache = getCurrentCache();
+  const data = cache ? cache.historicalData : [];
+  if (!data || !data.length) return;
   const rect = rangeTrack.getBoundingClientRect();
   const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-  const idx = Math.round(pct * state.historicalData.length);
+  const idx = Math.round(pct * data.length);
   const mid = (state.rangeStart + state.rangeEnd) / 2;
   if (idx < mid) {
     state.rangeStart = Math.max(0, Math.min(state.rangeEnd - 20, idx));
   } else {
-    state.rangeEnd = Math.min(state.historicalData.length - 1, Math.max(state.rangeStart + 20, idx));
+    state.rangeEnd = Math.min(data.length - 1, Math.max(state.rangeStart + 20, idx));
   }
+  setRangeState(state.activeContract, state.rangeStart, state.rangeEnd);
   updateSliderUI();
   updateChart();
 }
 
 function onMouseMove(e) {
-  if (!state.isDragging || !state.historicalData.length) return;
+  const cache = getCurrentCache();
+  const data = cache ? cache.historicalData : [];
+  if (!state.isDragging || !data || !data.length) return;
   const rect = rangeTrack.getBoundingClientRect();
   const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-  const idx = Math.round(pct * state.historicalData.length);
+  const idx = Math.round(pct * data.length);
 
   if (state.isDragging === 'left') {
     state.rangeStart = Math.max(0, Math.min(state.rangeEnd - 20, idx));
   } else {
-    state.rangeEnd = Math.min(state.historicalData.length - 1, Math.max(state.rangeStart + 20, idx));
+    state.rangeEnd = Math.min(data.length - 1, Math.max(state.rangeStart + 20, idx));
   }
+  setRangeState(state.activeContract, state.rangeStart, state.rangeEnd);
   updateSliderUI();
   updateChart();
 }
@@ -552,16 +620,19 @@ rangeHandleR.addEventListener('touchstart', (e) => {
 
 function onTouchMove(e) {
   e.preventDefault();
-  if (!state.isDragging || !state.historicalData.length) return;
+  const cache = getCurrentCache();
+  const data = cache ? cache.historicalData : [];
+  if (!state.isDragging || !data || !data.length) return;
   const rect = rangeTrack.getBoundingClientRect();
   const touch = e.touches[0];
   const pct = Math.max(0, Math.min(1, (touch.clientX - rect.left) / rect.width));
-  const idx = Math.round(pct * state.historicalData.length);
+  const idx = Math.round(pct * data.length);
   if (state.isDragging === 'left') {
     state.rangeStart = Math.max(0, Math.min(state.rangeEnd - 20, idx));
   } else {
-    state.rangeEnd = Math.min(state.historicalData.length - 1, Math.max(state.rangeStart + 20, idx));
+    state.rangeEnd = Math.min(data.length - 1, Math.max(state.rangeStart + 20, idx));
   }
+  setRangeState(state.activeContract, state.rangeStart, state.rangeEnd);
   updateSliderUI();
   updateChart();
 }
@@ -576,7 +647,7 @@ function onTouchEnd() {
 // KPI UPDATE
 // =============================================================================
 function updateKPIs() {
-  const d = state.currentData;
+  const d = getCurrentData('currentData');
   if (!d) return;
 
   const moex = d.moex || {};
@@ -615,18 +686,22 @@ function updateKPIs() {
 }
 
 function updateStats() {
-  const s = state.stats;
+  const cache = getCurrentCache();
+  if (!cache) return;
+  const s = cache.stats;
   if (!s || s.avg === null) return;
+
+  const currentData = cache.currentData;
 
   document.getElementById('kpiMedian').textContent = fmtPct(s.median);
   document.getElementById('kpiMedian').className = 'kpi-value ' + (s.median < 0 ? 'negative' : '');
-  document.getElementById('kpiMedian$').textContent = '$ ' + fmtN(s.median / 100 * (state.currentData?.moex?.mid || 95), 3);
+  document.getElementById('kpiMedian$').textContent = '$ ' + fmtN(s.median / 100 * (currentData?.moex?.mid || 95), 3);
 
   document.getElementById('kpiMinMax').textContent = fmtPct(s.min) + ' / ' + fmtPct(s.max);
-  document.getElementById('kpiMinMax$').textContent = '$' + fmtN(s.min / 100 * (state.currentData?.moex?.mid || 95), 2) + ' / $' + fmtN(s.max / 100 * (state.currentData?.moex?.mid || 95), 2);
+  document.getElementById('kpiMinMax$').textContent = '$' + fmtN(s.min / 100 * (currentData?.moex?.mid || 95), 2) + ' / $' + fmtN(s.max / 100 * (currentData?.moex?.mid || 95), 2);
 
   // Live Z-Score
-  const z = state.signalData;
+  const z = cache.signalData;
   if (z && z.zscore !== null) {
     document.getElementById('kpiZscore').textContent = fmtN(z.zscore, 2) + 'σ';
     if (Math.abs(z.zscore) >= 2) {
@@ -646,7 +721,9 @@ function updateStats() {
 }
 
 function updateSignal() {
-  const sig = state.signalData;
+  const cache = getCurrentCache();
+  if (!cache) return;
+  const sig = cache.signalData;
   if (!sig || !sig.signal) return;
   const badge = document.getElementById('kpiEntrySignal');
 
@@ -662,7 +739,8 @@ function updateSignal() {
 // TABLE UPDATE
 // =============================================================================
 function updateTable() {
-  const ticks = state.ticks;
+  const cache = getCurrentCache();
+  const ticks = cache ? cache.ticks : [];
   const tbody = document.getElementById('tickTableBody');
   document.getElementById('tickCount').textContent = (ticks.length || 0) + ' записей';
 
@@ -704,20 +782,29 @@ async function refreshAll() {
       api(`/api/ticks/${cid}?limit=50`),
     ]);
 
-    if (histR.status === 'fulfilled') state.historicalData = histR.value;
-    if (pricesR.status === 'fulfilled') state.pricesData = pricesR.value;
-    if (curR.status === 'fulfilled') state.currentData = curR.value;
-    if (zscR.status === 'fulfilled') state.zscoreData = zscR.value;
-    if (statR.status === 'fulfilled') state.stats = statR.value;
-    if (sigR.status === 'fulfilled') state.signalData = sigR.value;
-    if (ticksR.status === 'fulfilled') state.ticks = ticksR.value;
+    // Build cache object for this contract+tf
+    const cached = getCache(cid, tf) || {};
+    const newCache = { ...cached };
 
-    updateKPIs();
-    updateStats();
-    updateSignal();
-    updateChart();
-    updateSliderUI();
-    updateTable();
+    if (histR.status === 'fulfilled') newCache.historicalData = histR.value;
+    if (pricesR.status === 'fulfilled') newCache.pricesData = pricesR.value;
+    if (curR.status === 'fulfilled') newCache.currentData = curR.value;
+    if (zscR.status === 'fulfilled') newCache.zscoreData = zscR.value;
+    if (statR.status === 'fulfilled') newCache.stats = statR.value;
+    if (sigR.status === 'fulfilled') newCache.signalData = sigR.value;
+    if (ticksR.status === 'fulfilled') newCache.ticks = ticksR.value;
+
+    setCache(cid, tf, newCache);
+
+    // Only update UI if we're still on this contract+tf
+    if (state.activeContract === cid && state.activeTf === tf) {
+      updateKPIs();
+      updateStats();
+      updateSignal();
+      updateChart();
+      updateSliderUI();
+      updateTable();
+    }
 
     // Track connection health
     const failures = [histR, pricesR, curR, zscR, statR, sigR, ticksR].filter(r => r.status === 'rejected').length;
@@ -902,13 +989,19 @@ function useDemoData() {
     { id: 'bmk6', name: 'BMK6', moex_symbol: 'BMK6@RTSX', hl_coin: 'xyz:BRENTOIL', is_active: 1 },
   ];
   if (!state.activeContract) state.activeContract = 'bmm6';
-  state.historicalData = demo.hist;
-  state.pricesData = demo.prices;
-  state.zscoreData = demo.zData;
-  state.stats = demo.stats;
-  state.signalData = demo.sig;
-  state.currentData = demo.cur;
-  state.ticks = demo.ticks;
+
+  // Store demo data in per-contract cache
+  const cid = state.activeContract;
+  const tf = state.activeTf;
+  setCache(cid, tf, {
+    historicalData: demo.hist,
+    pricesData: demo.prices,
+    zscoreData: demo.zData,
+    stats: demo.stats,
+    signalData: demo.sig,
+    currentData: demo.cur,
+    ticks: demo.ticks,
+  });
 
   renderContractTabs();
   const c = state.contracts.find(x => x.id === state.activeContract);
