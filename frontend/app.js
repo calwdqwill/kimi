@@ -368,14 +368,45 @@ const rangeCount = document.getElementById('rangeCount');
 const rangeStartLabel = document.getElementById('rangeStart');
 const rangeEndLabel = document.getElementById('rangeEnd');
 
-const VISIBLE_DEFAULT = 200; // default visible points
+const MIN_VISIBLE_POINTS = 96;  // ~1 day on 15m (96 candles)
+const ZOOM_STEP_RATIO = 0.15;   // 15% per wheel tick
 
 function initRangeSlider() {
   const data = state.historicalData;
   if (!data.length) return;
   state.rangeEnd = data.length - 1;
-  state.rangeStart = 0;  // show full chart
+  state.rangeStart = 0;  // show full chart by default
   updateSliderUI();
+}
+
+// =============================================================================
+// CHART ZOOM (mouse wheel)
+// =============================================================================
+function onChartWheel(e) {
+  e.preventDefault();
+  const data = state.historicalData;
+  if (!data.length) return;
+
+  const total = data.length;
+  const currentVisible = state.rangeEnd - state.rangeStart + 1;
+
+  // deltaY > 0 = scroll down (zoom out), deltaY < 0 = scroll up (zoom in)
+  // User choice 1A: scroll UP = zoom IN (less days visible)
+  const zoomIn = e.deltaY < 0;
+
+  let newVisible;
+  if (zoomIn) {
+    newVisible = Math.max(MIN_VISIBLE_POINTS, Math.floor(currentVisible * (1 - ZOOM_STEP_RATIO)));
+  } else {
+    newVisible = Math.min(total, Math.ceil(currentVisible * (1 + ZOOM_STEP_RATIO)));
+  }
+
+  // Right edge fixed (user choice 2B)
+  state.rangeEnd = total - 1;
+  state.rangeStart = Math.max(0, state.rangeEnd - newVisible + 1);
+
+  updateSliderUI();
+  updateChart();
 }
 
 function updateSliderUI() {
@@ -451,6 +482,9 @@ rangeHandleR.addEventListener('mousedown', (e) => {
 });
 
 rangeTrack.addEventListener('click', onTrackClick);
+
+// Attach wheel zoom to chart canvas wrapper
+document.querySelector('.chart-wrap').addEventListener('wheel', onChartWheel, { passive: false });
 
 // Touch support
 rangeHandleL.addEventListener('touchstart', (e) => {
