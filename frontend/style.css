@@ -252,7 +252,10 @@ body {
   gap: 4px;
 }
 
-.asset-tab {
+/* Reset browser defaults for asset tabs */
+.asset-tabs button.asset-tab {
+  all: unset;
+  box-sizing: border-box;
   padding: 7px 20px;
   font-family: var(--font-ui);
   font-size: 13px;
@@ -269,26 +272,26 @@ body {
   text-align: center;
 }
 
-.asset-tab:hover {
+.asset-tabs button.asset-tab:hover {
   color: var(--text-primary);
   border-color: var(--border-hover);
   background: var(--bg-surface-raised);
 }
 
-.asset-tab.active {
+.asset-tabs button.asset-tab.active {
   color: var(--text-primary);
   background: var(--accent-blue-dim);
   border-color: var(--accent-blue);
   box-shadow: 0 0 12px rgba(59,130,246,0.15);
 }
 
-.asset-tab.active.gold {
+.asset-tabs button.asset-tab.active.gold {
   background: rgba(245,158,11,0.15);
   border-color: #f59e0b;
   box-shadow: 0 0 12px rgba(245,158,11,0.15);
 }
 
-.asset-tab.active.silver {
+.asset-tabs button.asset-tab.active.silver {
   background: rgba(148,163,184,0.15);
   border-color: #94a3b8;
   box-shadow: 0 0 12px rgba(148,163,184,0.15);

@@ -129,6 +129,12 @@ async function loadContracts() {
 
 function setActiveAsset(assetId) {
   state.activeAsset = assetId;
+  const asset = state.assets[assetId] || {};
+  // Update logo text dynamically
+  const logoAsset = document.getElementById('logoAsset');
+  if (logoAsset) {
+    logoAsset.textContent = (asset.name || assetId).toUpperCase() + ' SPREAD';
+  }
   renderAssetTabs();
   renderContractTabs();
   // Pick first contract of this asset
