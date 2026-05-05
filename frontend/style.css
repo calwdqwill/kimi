@@ -301,6 +301,12 @@ body {
   box-shadow: 0 4px 16px rgba(245,158,11,0.35);
 }
 
+.asset-tabs button.asset-tab .asset-icon {
+  margin-right: 8px;
+  font-size: 16px;
+  filter: drop-shadow(0 0 4px currentColor);
+}
+
 .asset-tabs button.asset-tab.active.silver {
   color: #fff !important;
   background: #94a3b8 !important;

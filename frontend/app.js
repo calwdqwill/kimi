@@ -187,20 +187,20 @@ function setActiveContract(id) {
 // ASSET TABS
 // =============================================================================
 function renderAssetTabs() {
-  const el = document.getElementById('assetTabs');
+  const el = document.getElementById("assetTabs");
   if (!el) return;
-  el.innerHTML = '';
+  el.innerHTML = "";
+  const icons = { brent: "\u26F3", gold: "\u25C6", silver: "\u25C8" };
   Object.entries(state.assets).forEach(([key, asset]) => {
-    const btn = document.createElement('button');
-    btn.className = 'asset-tab' + (key === state.activeAsset ? ' active' : '');
-    btn.textContent = asset.name || key.toUpperCase();
+    const btn = document.createElement("button");
+    btn.className = "asset-tab" + (key === state.activeAsset ? " active" : "") + " " + key;
+    btn.innerHTML = "<span class=\"asset-icon\">" + (icons[key] || "\u25C8") + "</span>" + (asset.name || key.toUpperCase());
     btn.onclick = () => setActiveAsset(key);
     el.appendChild(btn);
   });
 }
 
-// =============================================================================
-// CONTRACT TABS
+// // CONTRACT TABS// CONTRACT TABS
 // =============================================================================
 function renderContractTabs() {
   const el = document.getElementById('contractTabs');
