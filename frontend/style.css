@@ -252,16 +252,9 @@ body {
   gap: 4px;
 }
 
-/* Reset browser defaults for asset tabs */
+/* Asset tabs - explicit reset to avoid browser defaults */
 .asset-tabs button.asset-tab {
-  all: unset;
-  appearance: none;
-  -webkit-appearance: none;
-  box-sizing: border-box;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
+  margin: 0;
   padding: 10px 28px;
   font-family: var(--font-ui);
   font-size: 14px;
@@ -276,8 +269,15 @@ body {
   letter-spacing: 0.5px;
   min-width: 140px;
   height: 42px;
+  line-height: 42px;
   text-align: center;
   user-select: none;
+  outline: none;
+  -webkit-appearance: none;
+  appearance: none;
+  display: inline-block;
+  vertical-align: middle;
+  box-shadow: none;
 }
 
 .asset-tabs button.asset-tab:hover {
@@ -288,21 +288,23 @@ body {
 }
 
 .asset-tabs button.asset-tab.active {
-  color: #fff;
-  background: var(--accent-blue);
-  border-color: var(--accent-blue);
+  color: #fff !important;
+  background: var(--accent-blue) !important;
+  border-color: var(--accent-blue) !important;
   box-shadow: 0 4px 16px rgba(59,130,246,0.35);
 }
 
 .asset-tabs button.asset-tab.active.gold {
-  background: #f59e0b;
-  border-color: #f59e0b;
+  color: #fff !important;
+  background: #f59e0b !important;
+  border-color: #f59e0b !important;
   box-shadow: 0 4px 16px rgba(245,158,11,0.35);
 }
 
 .asset-tabs button.asset-tab.active.silver {
-  background: #94a3b8;
-  border-color: #94a3b8;
+  color: #fff !important;
+  background: #94a3b8 !important;
+  border-color: #94a3b8 !important;
   box-shadow: 0 4px 16px rgba(148,163,184,0.35);
 }
 
