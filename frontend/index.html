@@ -107,7 +107,7 @@
     <div class="header-left">
       <div class="logo">
         <span class="logo-icon">&#9640;</span>
-        <span class="logo-text">BRENT SPREAD</span>
+        <span class="logo-text" id="logoAsset">BRENT SPREAD</span>
         <span class="logo-accent" id="logoContract">/ BMM6</span>
       </div>
       <div class="live-indicator">
@@ -116,6 +116,7 @@
       </div>
     </div>
     <div class="header-right">
+      <div class="asset-tabs" id="assetTabs"></div>
       <div class="contract-tabs" id="contractTabs"></div>
       <div class="tf-group">
         <button class="tf-btn" data-tf="5m">5m</button>
@@ -128,12 +129,12 @@
   <!-- KPI GRID -->
   <div class="kpi-grid" id="kpiGrid">
     <div class="kpi-card kpi-moex" id="kpiMoex">
-      <div class="kpi-label">MOEX <span id="kpiMoexName">BMM6</span> (USD/bbl)</div>
+      <div class="kpi-label">MOEX <span id="kpiMoexName">BMM6</span> (<span id="kpiMoexUnit">USD/bbl</span>)</div>
       <div class="kpi-value" id="kpiMoexMid">$&#8212;</div>
       <div class="kpi-sub"><span class="bid" id="kpiMoexBid">bid &#8212;</span> / <span class="ask" id="kpiMoexAsk">ask &#8212;</span></div>
     </div>
     <div class="kpi-card kpi-hl" id="kpiHl">
-      <div class="kpi-label">Hyperliquid BRENTOIL</div>
+      <div class="kpi-label" id="kpiHlName">Hyperliquid BRENTOIL</div>
       <div class="kpi-value" id="kpiHlMid">$&#8212;</div>
       <div class="kpi-sub"><span class="bid" id="kpiHlBid">bid &#8212;</span> / <span class="ask" id="kpiHlAsk">ask &#8212;</span></div>
     </div>
@@ -231,6 +232,6 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-<script src="/static/app.js?v=zoom1"></script>
+<script src="/static/app.js?v=multiasset1"></script>
 </body>
 </html>

@@ -7,8 +7,10 @@
 // STATE
 // =============================================================================
 const state = {
-  contracts: [],
-  activeContract: null,
+  assets: {},           // config from /api/assets
+  contracts: [],        // all contracts from /api/contracts
+  activeAsset: 'brent', // current asset: brent | gold | silver
+  activeContract: null, // current contract id
   activeTf: '15m',
   chartMode: 'spread%',
   historicalData: [],
@@ -19,9 +21,9 @@ const state = {
   tickCount: 0,
   sessionStart: null,
   // Range slider state
-  rangeStart: 0,    // index into historicalData
-  rangeEnd: 0,      // index into historicalData
-  isDragging: null, // 'left' | 'right' | null
+  rangeStart: 0,
+  rangeEnd: 0,
+  isDragging: null,
   pollInterval: null,
   isOnline: true,
   consecutiveFails: 0,
@@ -77,20 +79,50 @@ async function api(path, retries = 2) {
   }
 }
 
+async function loadAssets() {
+  state.assets = await api('/api/assets');
+}
+
+function getContractsForAsset(assetId) {
+  return state.contracts.filter(c => c.asset === assetId);
+}
+
 async function loadContracts() {
   state.contracts = await api('/api/contracts');
+  renderAssetTabs();
   renderContractTabs();
-  if (!state.activeContract && state.contracts.length > 0) {
-    const active = state.contracts.find(c => c.is_active) || state.contracts[0];
+  if (!state.activeContract) {
+    const assetContracts = getContractsForAsset(state.activeAsset);
+    const active = assetContracts.find(c => c.is_active) || assetContracts[0];
+    if (active) setActiveContract(active.id);
+  }
+}
+
+function setActiveAsset(assetId) {
+  state.activeAsset = assetId;
+  renderAssetTabs();
+  renderContractTabs();
+  // Pick first contract of this asset
+  const assetContracts = getContractsForAsset(assetId);
+  const active = assetContracts.find(c => c.is_active) || assetContracts[0];
+  if (active) {
     setActiveContract(active.id);
+  } else {
+    // No contracts for this asset yet
+    state.activeContract = null;
+    document.getElementById('logoContract').textContent = '/ —';
+    document.getElementById('kpiMoexName').textContent = '—';
   }
 }
 
 function setActiveContract(id) {
   state.activeContract = id;
   const c = state.contracts.find(x => x.id === id);
+  const asset = state.assets[state.activeAsset] || {};
   document.getElementById('logoContract').textContent = '/ ' + (c?.name || id.toUpperCase());
   document.getElementById('kpiMoexName').textContent = c?.name || id.toUpperCase();
+  document.getElementById('kpiMoexUnit').textContent = asset.unit || 'USD';
+  document.getElementById('kpiHlName').textContent = 'Hyperliquid ' + (asset.name || '');
   renderContractTabs();
   refreshAll().then(() => {
     initRangeSlider();
@@ -100,12 +132,29 @@ function setActiveContract(id) {
 }
 
 // =============================================================================
+// ASSET TABS
+// =============================================================================
+function renderAssetTabs() {
+  const el = document.getElementById('assetTabs');
+  if (!el) return;
+  el.innerHTML = '';
+  Object.entries(state.assets).forEach(([key, asset]) => {
+    const btn = document.createElement('button');
+    btn.className = 'asset-tab' + (key === state.activeAsset ? ' active' : '');
+    btn.textContent = asset.name || key.toUpperCase();
+    btn.onclick = () => setActiveAsset(key);
+    el.appendChild(btn);
+  });
+}
+
+// =============================================================================
 // CONTRACT TABS
 // =============================================================================
 function renderContractTabs() {
   const el = document.getElementById('contractTabs');
   el.innerHTML = '';
-  state.contracts.forEach(c => {
+  const assetContracts = getContractsForAsset(state.activeAsset);
+  assetContracts.forEach(c => {
     const btn = document.createElement('button');
     btn.className = 'contract-tab' + (c.id === state.activeContract ? ' active' : '');
     if (c.is_active && c.id === state.activeContract) {
@@ -818,6 +867,7 @@ async function init() {
 
   // Try to load from API, fallback to demo data
   try {
+    await loadAssets();
     await loadContracts();
     await refreshAll();
     initRangeSlider();
