@@ -86,6 +86,13 @@ DEFAULT_CONTRACTS = [
         "hl_coin": "xyz:BRENTOIL",
         "is_active": True,
     },
+    {
+        "id": "bmn6",
+        "name": "BMN6",
+        "moex_symbol": "BMN6@RTSX",
+        "hl_coin": "xyz:BRENTOIL",
+        "is_active": True,
+    },
 ]
 
 # ---------------------------------------------------------------------------
