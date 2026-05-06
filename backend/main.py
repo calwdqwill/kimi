@@ -23,6 +23,7 @@ from config import (
 )
 from clients import alor_client, hl_client
 from domain import sync, spread, zscore, stats as stats_module
+import alor_history
 
 _POLL_EXECUTOR = concurrent.futures.ThreadPoolExecutor(max_workers=4, thread_name_prefix="poll_")
 
@@ -635,3 +636,44 @@ def get_signal(contract_id: str):
 def get_ticks(contract_id: str, limit: int = 50):
     """Return latest ticks for the contract."""
     return database.get_ticks(contract_id, limit)
+
+
+# ---------------------------------------------------------------------------
+# API endpoints — Full History Load (Alor)
+# ---------------------------------------------------------------------------
+@app.post("/api/history/load/{contract_id}")
+def load_history(contract_id: str, timeframe: str = "15m"):
+    """Load full previous+current contract history from Alor."""
+    contract = database.get_contract(contract_id)
+    if not contract:
+        raise HTTPException(status_code=404, detail="Contract not found")
+
+    symbol = contract["moex_symbol"].split("@")[0]
+    asset = contract.get("asset", "brent")
+
+    if timeframe not in TIMEFRAMES:
+        raise HTTPException(status_code=400, detail="Unsupported timeframe")
+
+    result = alor_history.load_full_history(contract_id, symbol, asset, timeframe)
+    return {
+        "status": "ok",
+        "contract_id": contract_id,
+        "timeframe": timeframe,
+        "loaded": result["loaded"],
+        "previous_candles": result["previous"],
+        "current_candles": result["current"],
+        "previous_contract": result["prev_contract"],
+        "current_contract": result["curr_contract"],
+    }
+
+
+@app.get("/api/history/alor/{contract_id}/{timeframe}")
+def get_alor_history(contract_id: str, timeframe: str):
+    """Return merged Alor OHLCV history for a contract."""
+    contract = database.get_contract(contract_id)
+    if not contract:
+        raise HTTPException(status_code=404, detail="Contract not found")
+
+    symbol = contract["moex_symbol"].split("@")[0]
+    candles = database.get_alor_candles(contract_id, symbol, timeframe)
+    return candles

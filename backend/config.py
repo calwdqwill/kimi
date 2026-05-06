@@ -112,36 +112,40 @@ ASSETS = {
 # contract_month / contract_year: for monthly contracts (Brent)
 #   when history_mode = "month_start", history loads from 1st of this month
 # ---------------------------------------------------------------------------
+# Month letters for contract code generation
+MONTH_LETTERS = ["F", "G", "H", "J", "K", "M", "N", "Q", "U", "V", "X", "Z"]
+QUARTER_LETTERS = ["H", "M", "U", "Z"]  # Mar, Jun, Sep, Dec
+
 DEFAULT_CONTRACTS = [
-    # Brent — monthly
+    # Brent — monthly FULL contract BR (not mini BM)
     {
-        "id": "bmm6",
-        "name": "BMM6",
+        "id": "brm6",
+        "name": "BRM6",
         "asset": "brent",
-        "moex_symbol": "BMM6@RTSX",
+        "moex_symbol": "BRM6@RTSX",
+        "hl_coin": "xyz:BRENTOIL",
+        "is_active": True,
+        "contract_month": 6,
+        "contract_year": 2026,
+    },
+    {
+        "id": "brk6",
+        "name": "BRK6",
+        "asset": "brent",
+        "moex_symbol": "BRK6@RTSX",
         "hl_coin": "xyz:BRENTOIL",
         "is_active": True,
         "contract_month": 5,
         "contract_year": 2026,
     },
     {
-        "id": "bmk6",
-        "name": "BMK6",
+        "id": "brn6",
+        "name": "BRN6",
         "asset": "brent",
-        "moex_symbol": "BMK6@RTSX",
+        "moex_symbol": "BRN6@RTSX",
         "hl_coin": "xyz:BRENTOIL",
         "is_active": True,
-        "contract_month": 4,
-        "contract_year": 2026,
-    },
-    {
-        "id": "bmn6",
-        "name": "BMN6",
-        "asset": "brent",
-        "moex_symbol": "BMN6@RTSX",
-        "hl_coin": "xyz:BRENTOIL",
-        "is_active": True,
-        "contract_month": 6,
+        "contract_month": 7,
         "contract_year": 2026,
     },
     # Gold — quarterly

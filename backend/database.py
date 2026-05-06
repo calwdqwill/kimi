@@ -46,6 +46,21 @@ CREATE TABLE IF NOT EXISTS candles (
     UNIQUE(contract_id, source, symbol, timeframe, timestamp_ms)
 );
 
+CREATE TABLE IF NOT EXISTS alor_candles (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    contract_id TEXT NOT NULL,
+    symbol TEXT NOT NULL,
+    timeframe TEXT NOT NULL,
+    timestamp_ms INTEGER NOT NULL,
+    open REAL NOT NULL,
+    high REAL NOT NULL,
+    low REAL NOT NULL,
+    close REAL NOT NULL,
+    volume INTEGER NOT NULL DEFAULT 0,
+    is_prev_contract INTEGER NOT NULL DEFAULT 0,
+    UNIQUE(contract_id, symbol, timeframe, timestamp_ms)
+);
+
 CREATE TABLE IF NOT EXISTS current_prices (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     contract_id TEXT NOT NULL,
@@ -72,6 +87,8 @@ CREATE TABLE IF NOT EXISTS tick_log (
 
 CREATE INDEX IF NOT EXISTS idx_candles_lookup 
     ON candles(contract_id, source, symbol, timeframe, timestamp_ms);
+CREATE INDEX IF NOT EXISTS idx_alor_candles_lookup 
+    ON alor_candles(contract_id, symbol, timeframe, timestamp_ms);
 CREATE INDEX IF NOT EXISTS idx_tick_log_contract 
     ON tick_log(contract_id, timestamp_ms);
 """
@@ -304,6 +321,75 @@ def get_candles_recent(
         rows = [dict(row) for row in cur.fetchall()]
         rows.reverse()  # oldest first for chart rendering
         return rows
+    finally:
+        conn.close()
+
+
+def insert_alor_candles_batch(rows: list[tuple]) -> None:
+    """Bulk insert Alor OHLCV candles.
+    Each row: (contract_id, symbol, timeframe, timestamp_ms, open, high, low, close, volume, is_prev_contract)
+    """
+    if not rows:
+        return
+    conn = _get_conn()
+    try:
+        with DB_LOCK:
+            conn.executemany(
+                """
+                INSERT OR IGNORE INTO alor_candles
+                    (contract_id, symbol, timeframe, timestamp_ms, open, high, low, close, volume, is_prev_contract)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                rows,
+            )
+            conn.commit()
+    finally:
+        conn.close()
+
+
+def get_alor_candles(
+    contract_id: str,
+    symbol: str,
+    timeframe: str,
+    from_ms: Optional[int] = None,
+    to_ms: Optional[int] = None,
+    limit: Optional[int] = None,
+) -> list[dict]:
+    """Return Alor OHLCV candles ordered ASC."""
+    conn = _get_conn()
+    try:
+        sql = """
+            SELECT timestamp_ms, open, high, low, close, volume
+            FROM alor_candles
+            WHERE contract_id = ? AND symbol = ? AND timeframe = ?
+        """
+        params: list = [contract_id, symbol, timeframe]
+        if from_ms is not None:
+            sql += " AND timestamp_ms >= ?"
+            params.append(from_ms)
+        if to_ms is not None:
+            sql += " AND timestamp_ms <= ?"
+            params.append(to_ms)
+        sql += " ORDER BY timestamp_ms ASC"
+        if limit is not None:
+            sql += " LIMIT ?"
+            params.append(limit)
+        cur = conn.execute(sql, params)
+        return [dict(row) for row in cur.fetchall()]
+    finally:
+        conn.close()
+
+
+def delete_alor_candles(contract_id: str, symbol: str, timeframe: str) -> None:
+    """Delete all Alor candles for a contract+timeframe (for reload)."""
+    conn = _get_conn()
+    try:
+        with DB_LOCK:
+            conn.execute(
+                "DELETE FROM alor_candles WHERE contract_id = ? AND symbol = ? AND timeframe = ?",
+                (contract_id, symbol, timeframe),
+            )
+            conn.commit()
     finally:
         conn.close()
 
