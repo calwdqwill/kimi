@@ -35,6 +35,59 @@
 
 ---
 
+## 2026-05-08 — Alor History Integration V3
+
+### Phase 1: Backend Alor Integration
+- **`backend/alor_history.py`** — новый модуль загрузки истории из Alor API
+  - `get_periods()` — вычисляет периоды для Brent (2 месяца) и квартальных контрактов
+  - `fetch_alor_ohlcv()` — запросы к `/md/v2/history` с `instrumentGroup=RFUD`, `format=Slim`
+  - `load_full_history()` — lazy-load: предыдущий контракт (`untraded=true`) + текущий (`untraded=false`) → мёрдж в `alor_candles`
+- **`backend/database.py`** — хелперы для `alor_candles`
+  - `has_alor_candles()`, `get_alor_candles_recent()`, `get_last_alor_timestamp()`, `insert_alor_candles_batch()`, `delete_alor_candles()`
+- **`backend/main.py`** — интеграция Alor fallback
+  - `_get_moex_series()` — предпочитает `alor_candles`, fallback на legacy `candles`
+  - 5 endpoint'ов обновлены: `/api/historical/`, `/api/prices/`, `/api/zscore/`, `/api/stats/`, `/api/signal/`
+  - `POST /api/history/load/{cid}?timeframe={tf}` — ручная перезагрузка истории
+  - **limit увеличен с 1500 до 10000** — полная история на графике без обрезки
+
+### Phase 2: Frontend Reload Button
+- **Кнопка ↻ Reload** в хедере — ручная загрузка/перезагрузка Alor-истории
+- **Спиннер-анимация** при загрузке (`@keyframes spin`)
+- **Cache invalidation** — `setCache(cid, tf, null)` + `refreshAll()`
+- **Cache busting** обновлён: `app.js?v=multiasset8`, `style.css?v=5`
+
+### Phase 3: VPS Deploy & Critical Fix
+- Загружены 6 файлов на сервер `155.212.183.185`
+- **Критический фикс:** `dashboard.service` запускается из `/opt/dashboard/backend/backend/`, файлы грузились в `/opt/dashboard/backend/` → скопированы в правильную директорию
+- Активированы `brm6/brk6/brn6` (full Brent), деактивированы `bmm6/bmk6/bmn6` (mini Brent)
+
+### Data Gap Fix — BRM6 (April → May)
+- **Проблема:** Alor API возвращает BRM6 только с ~1 мая. Предыдущий контракт BRK6 — `[]` даже с `untraded=true`.
+- **Решение:**
+  - Legacy `bmm6` (mini Brent June) MOEX → `brm6` `alor_candles` (`is_prev_contract=1`)
+  - Legacy `bmm6` HL → `brm6` `candles` (source='hyperliquid')
+- **Результат:** BRM6 15m — **1888 свечей** (2 апреля → 8 мая), без разрывов
+
+### Data Gap Fix — BRN6 (April → May)
+- **Проблема:** BRN6 alor данные только с 1 мая.
+- **Решение:** Legacy `bmn6` (mini Brent July) MOEX + HL → `brn6`
+- **Результат:** BRN6 15m — **1284 свечи** (15 апреля → 8 мая)
+
+### Production-статус
+| Контракт | ТФ | Свечей | Период |
+|----------|-----|--------|--------|
+| BRM6 | 5m | 5211 | 5 апр → 8 мая |
+| BRM6 | 15m | 1888 | 2 апр → 8 мая |
+| BRM6 | 60m | 493 | 2 апр → 8 мая |
+| BRN6 | 5m | 3022 | 17 апр → 8 мая |
+| BRN6 | 15m | 1284 | 15 апр → 8 мая |
+| BRN6 | 60m | 336 | 15 апр → 8 мая |
+
+### Git Branches
+- `V3_prod` — продакшн-ветка (Alor Integration + Data Gap Fixes)
+
+---
+
 ## Pre-2026-05-05
 
 ### Performance & Reliability
