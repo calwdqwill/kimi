@@ -1,5 +1,5 @@
 /**
- * Brent Spread Dashboard — Multi-Contract Frontend
+ * Brent Spread Dashboard - Multi-Contract Frontend
  * Ocean Theme | Mission Control Layout
  */
 
@@ -62,16 +62,16 @@ function getCurrentRange() {
 // UTILS
 // =============================================================================
 function fmt$(v) {
-  if (v === null || v === undefined || isNaN(v)) return '—';
-  const s = v < 0 ? '—' : '';
+  if (v === null || v === undefined || isNaN(v)) return '-';
+  const s = v < 0 ? '-' : '';
   return s + '$' + Math.abs(v).toFixed(3);
 }
 function fmtPct(v) {
-  if (v === null || v === undefined || isNaN(v)) return '—';
+  if (v === null || v === undefined || isNaN(v)) return '-';
   return (v >= 0 ? '+' : '') + v.toFixed(3) + '%';
 }
 function fmtN(v, d = 2) {
-  if (v === null || v === undefined || isNaN(v)) return '—';
+  if (v === null || v === undefined || isNaN(v)) return '-';
   return (v >= 0 ? '' : '') + v.toFixed(d);
 }
 function fmtTs(ms) {
@@ -145,8 +145,8 @@ function setActiveAsset(assetId) {
   } else {
     // No contracts for this asset yet
     state.activeContract = null;
-    document.getElementById('logoContract').textContent = '/ —';
-    document.getElementById('kpiMoexName').textContent = '—';
+    document.getElementById('logoContract').textContent = '/ -';
+    document.getElementById('kpiMoexName').textContent = '-';
   }
 }
 
@@ -220,24 +220,24 @@ function renderContractTabs() {
   // Add new button
   const addBtn = document.createElement('button');
   addBtn.className = 'contract-tab add-new';
-  addBtn.textContent = '+ Добавить';
+  addBtn.textContent = '+ Add';
   addBtn.onclick = showAddContractModal;
   el.appendChild(addBtn);
 }
 
 function showAddContractModal() {
   // Simple prompt-based for now
-  const id = prompt('ID контракта (например: bmm7):');
+  const id = prompt('ID contracta (example: bmm7):');
   if (!id) return;
-  const name = prompt('Название (например: BMM7):') || id.toUpperCase();
-  const moex = prompt('MOEX символ (например: BMM7@RTSX):');
+  const name = prompt('Name (example: BMM7):') || id.toUpperCase();
+  const moex = prompt('MOEX symbol (example: BMM7@RTSX):');
   if (!moex) return;
-  const hl = prompt('HL тикер (например: xyz:BRENTOIL):') || 'xyz:BRENTOIL';
+  const hl = prompt('HL ticker (example: xyz:BRENTOIL):') || 'xyz:BRENTOIL';
 
   fetch(`/api/contracts?contract_id=${encodeURIComponent(id)}&name=${encodeURIComponent(name)}&moex_symbol=${encodeURIComponent(moex)}&hl_coin=${encodeURIComponent(hl)}`, { method: 'POST' })
     .then(r => r.json())
     .then(() => loadContracts())
-    .catch(e => alert('Ошибка: ' + e.message));
+    .catch(e => alert('Error: ' + e.message));
 }
 
 // =============================================================================
@@ -278,7 +278,7 @@ document.querySelectorAll('.table-tab').forEach(tab => {
 });
 
 // =============================================================================
-// CHART.JS SETUP (no zoom plugin — using custom range slider)
+// CHART.JS SETUP (no zoom plugin - using custom range slider)
 // =============================================================================
 const ctx = document.getElementById('chart').getContext('2d');
 const chart = new Chart(ctx, {
@@ -327,7 +327,7 @@ const chart = new Chart(ctx, {
           },
           label: (ctx) => {
             const v = ctx.parsed.y;
-            if (v === null || v === undefined) return ctx.dataset.label + ': —';
+            if (v === null || v === undefined) return ctx.dataset.label + ': -';
             if (state.chartMode === 'zscore') return ctx.dataset.label + ': ' + v.toFixed(4) + 'σ';
             if (state.chartMode === 'prices') return ctx.dataset.label + ': $' + v.toFixed(2);
             return ctx.dataset.label + ': ' + v.toFixed(4) + '%';
@@ -409,7 +409,7 @@ function updateChart() {
     chart.data.datasets[3].fill = false;
     chart.options.scales.y.ticks.callback = (v) => v.toFixed(1) + 'σ';
   } else if (state.chartMode === 'prices') {
-    // Prices mode — raw MOEX and HL close prices
+    // Prices mode - raw MOEX and HL close prices
     const pData = cache.pricesData;
     if (!pData || !pData.length) return;
     const pStart = Math.floor(start * (pData.length / data.length));
@@ -660,25 +660,25 @@ function updateKPIs() {
   const hl = d.hyperliquid || {};
 
   // MOEX
-  document.getElementById('kpiMoexMid').textContent = moex.mid ? fmt$(moex.mid) : '—';
-  document.getElementById('kpiMoexBid').textContent = moex.best_bid ? 'bid ' + moex.best_bid.toFixed(2) : 'bid —';
-  document.getElementById('kpiMoexAsk').textContent = moex.best_ask ? 'ask ' + moex.best_ask.toFixed(2) : 'ask —';
+  document.getElementById('kpiMoexMid').textContent = moex.mid ? fmt$(moex.mid) : '-';
+  document.getElementById('kpiMoexBid').textContent = moex.best_bid ? 'bid ' + moex.best_bid.toFixed(2) : 'bid -';
+  document.getElementById('kpiMoexAsk').textContent = moex.best_ask ? 'ask ' + moex.best_ask.toFixed(2) : 'ask -';
 
   // HL
-  document.getElementById('kpiHlMid').textContent = hl.mid ? fmt$(hl.mid) : '—';
-  document.getElementById('kpiHlBid').textContent = hl.best_bid ? 'bid ' + hl.best_bid.toFixed(2) : 'bid —';
-  document.getElementById('kpiHlAsk').textContent = hl.best_ask ? 'ask ' + hl.best_ask.toFixed(2) : 'ask —';
+  document.getElementById('kpiHlMid').textContent = hl.mid ? fmt$(hl.mid) : '-';
+  document.getElementById('kpiHlBid').textContent = hl.best_bid ? 'bid ' + hl.best_bid.toFixed(2) : 'bid -';
+  document.getElementById('kpiHlAsk').textContent = hl.best_ask ? 'ask ' + hl.best_ask.toFixed(2) : 'ask -';
 
   // Spread
   const sp = d.current_spread_pct;
   const spVal = document.getElementById('kpiSpreadPct');
-  spVal.textContent = sp !== null ? fmtPct(sp) : '—';
+  spVal.textContent = sp !== null ? fmtPct(sp) : '-';
   spVal.className = 'kpi-value ' + (sp < 0 ? 'negative' : sp > 0 ? 'positive' : '');
-  document.getElementById('kpiSpread$').textContent = d.arb_spread !== null ? fmt$(d.arb_spread) : '—';
+  document.getElementById('kpiSpread$').textContent = d.arb_spread !== null ? fmt$(d.arb_spread) : '-';
 
   // Arb Spread
-  document.getElementById('kpiArb').textContent = d.arb_spread !== null ? fmtN(d.arb_spread, 3) : '—';
-  document.getElementById('kpiArbDir').textContent = d.arb_direction || '—';
+  document.getElementById('kpiArb').textContent = d.arb_spread !== null ? fmtN(d.arb_spread, 3) : '-';
+  document.getElementById('kpiArbDir').textContent = d.arb_direction || '-';
 
   // Ticks
   state.tickCount++;
@@ -688,7 +688,7 @@ function updateKPIs() {
   const h = Math.floor(elapsed / 3600).toString().padStart(2, '0');
   const m = Math.floor((elapsed % 3600) / 60).toString().padStart(2, '0');
   const s = (elapsed % 60).toString().padStart(2, '0');
-  document.getElementById('kpiSession').textContent = `сессия ${h}:${m}:${s}`;
+  document.getElementById('kpiSession').textContent = `session ${h}:${m}:${s}`;
 }
 
 function updateStats() {
@@ -712,15 +712,15 @@ function updateStats() {
     document.getElementById('kpiZscore').textContent = fmtN(z.zscore, 2) + 'σ';
     if (Math.abs(z.zscore) >= 2) {
       document.getElementById('kpiZscoreStatus').style.color = '#ef4444';
-      document.getElementById('kpiZscoreText').textContent = 'СИГНАЛ!';
+      document.getElementById('kpiZscoreText').textContent = 'SIGNAL!';
       document.getElementById('kpiZscoreStatus').querySelector('.status-dot').style.background = '#ef4444';
     } else if (Math.abs(z.zscore) >= 1.5) {
       document.getElementById('kpiZscoreStatus').style.color = '#f59e0b';
-      document.getElementById('kpiZscoreText').textContent = 'Внимание: |Z| > 1.5';
+      document.getElementById('kpiZscoreText').textContent = 'Attention: |Z| > 1.5';
       document.getElementById('kpiZscoreStatus').querySelector('.status-dot').style.background = '#f59e0b';
     } else {
       document.getElementById('kpiZscoreStatus').style.color = '#22c55e';
-      document.getElementById('kpiZscoreText').textContent = 'В пределах нормы';
+      document.getElementById('kpiZscoreText').textContent = 'Within normal';
       document.getElementById('kpiZscoreStatus').querySelector('.status-dot').style.background = '#22c55e';
     }
   }
@@ -734,10 +734,10 @@ function updateSignal() {
   const badge = document.getElementById('kpiEntrySignal');
 
   badge.className = 'entry-badge ' + sig.signal;
-  let text = 'НЕТ СИГНАЛА';
+  let text = 'NO SIGNAL';
   if (sig.signal === 'buy') text = 'BUY: Spread < -2σ';
   else if (sig.signal === 'sell') text = 'SELL: Spread > +2σ';
-  else if (sig.signal === 'watch') text = 'ВНИМАНИЕ: |Z| > 1.5';
+  else if (sig.signal === 'watch') text = 'WATCH: |Z| > 1.5';
   badge.innerHTML = `<span class="signal-dot"></span>${text}`;
 }
 
@@ -748,10 +748,10 @@ function updateTable() {
   const cache = getCurrentCache();
   const ticks = cache ? cache.ticks : [];
   const tbody = document.getElementById('tickTableBody');
-  document.getElementById('tickCount').textContent = (ticks.length || 0) + ' записей';
+  document.getElementById('tickCount').textContent = (ticks.length || 0) + ' records';
 
   if (!ticks.length) {
-    tbody.innerHTML = '<tr><td colspan="6" class="loading">Нет данных</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6" class="loading">No data</td></tr>';
     return;
   }
 
@@ -763,7 +763,7 @@ function updateTable() {
       <td>${fmtN(t.hl_mid, 2)}</td>
       <td class="${t.spread < 0 ? 'negative' : ''}">${fmtN(t.spread, 3)}</td>
       <td class="${t.spread_pct < 0 ? 'negative' : ''}">${fmtPct(t.spread_pct)}</td>
-      <td ${zClass}>${t.zscore !== null ? fmtN(t.zscore, 2) + 'σ' : '—'}</td>
+      <td ${zClass}>${t.zscore !== null ? fmtN(t.zscore, 2) + 'σ' : '-'}</td>
     </tr>`;
   }).join('');
 }
@@ -777,7 +777,7 @@ async function refreshAll() {
   const tf = state.activeTf;
 
   try {
-    // Fetch in parallel — use allSettled so one slow endpoint doesn't block everything
+    // Fetch in parallel - use allSettled so one slow endpoint doesn't block everything
     const [histR, pricesR, curR, zscR, statR, sigR, ticksR] = await Promise.allSettled([
       api(`/api/historical/${cid}/${tf}`),
       api(`/api/prices/${cid}/${tf}`),
@@ -919,7 +919,7 @@ function generateDemoData() {
   const sig = {
     signal: signal,
     zscore: currentZ,
-    description: signal === 'buy' ? 'BUY: Spread < -2σ' : signal === 'sell' ? 'SELL: Spread > +2σ' : signal === 'watch' ? 'Внимание: |Z| > 1.5' : 'В пределах нормы',
+    description: signal === 'buy' ? 'BUY: Spread < -2σ' : signal === 'sell' ? 'SELL: Spread > +2σ' : signal === 'watch' ? 'Attention: |Z| > 1.5' : 'Within normal',
     current_spread_pct: hist[hist.length - 1].spread_pct,
     avg: avg,
     entry_low: stats.entry_low,
@@ -983,7 +983,7 @@ async function init() {
       const m = Math.floor((elapsed % 3600) / 60).toString().padStart(2, '0');
       const s = (elapsed % 60).toString().padStart(2, '0');
       const el = document.getElementById('kpiSession');
-      if (el) el.textContent = `сессия ${h}:${m}:${s}`;
+      if (el) el.textContent = `session ${h}:${m}:${s}`;
     }
   }, 1000);
 }
@@ -1022,5 +1022,28 @@ function useDemoData() {
   updateSliderUI();
   updateTable();
 }
+
+// Alor history reload button
+document.getElementById('reloadAlorBtn').addEventListener('click', async () => {
+  const btn = document.getElementById('reloadAlorBtn');
+  if (!state.activeContract) return;
+  btn.classList.add('spin');
+  btn.disabled = true;
+  try {
+    const res = await fetch(`/api/history/load/${state.activeContract}?timeframe=${state.activeTf}`, { method: 'POST' });
+    const data = await res.json();
+    console.log('Alor reload:', data);
+    // Invalidate cache for this contract+tf and refresh
+    setCache(state.activeContract, state.activeTf, null);
+    await refreshAll();
+    alert(`Loaded ${data.loaded} candles (${data.previous_candles} prev + ${data.current_candles} curr)`);
+  } catch (e) {
+    console.error('Alor reload failed:', e);
+    alert('Reload failed: ' + e.message);
+  } finally {
+    btn.classList.remove('spin');
+    btn.disabled = false;
+  }
+});
 
 init();

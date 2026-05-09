@@ -400,6 +400,33 @@ body {
   font-weight: 600;
 }
 
+.reload-btn {
+  margin-left: 8px;
+  padding: 5px 10px;
+  font-family: var(--font-mono);
+  font-size: 14px;
+  color: var(--accent-green);
+  background: transparent;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.reload-btn:hover {
+  background: rgba(34,197,94,0.1);
+  border-color: var(--accent-green);
+}
+
+.reload-btn.spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
 /* ====== KPI GRID ====== */
 .kpi-grid {
   display: grid;
