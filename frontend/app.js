@@ -279,9 +279,13 @@ document.querySelectorAll('.table-tab').forEach(tab => {
     document.querySelectorAll('.table-tab').forEach(t => t.classList.remove('active'));
     tab.classList.add('active');
     const mode = tab.dataset.tab;
-    document.getElementById('tickTable').style.display = mode === 'ticks' ? '' : 'none';
-    document.getElementById('paperTrade').style.display = mode === 'paper' ? '' : 'none';
-    document.getElementById('fundingPanel').style.display = mode === 'funding' ? '' : 'none';
+    const tickTable = document.getElementById('tickTable');
+    const paperTrade = document.getElementById('paperTrade');
+    const fundingPanel = document.getElementById('fundingPanel');
+    if (tickTable) tickTable.style.display = mode === 'ticks' ? '' : 'none';
+    if (paperTrade) paperTrade.style.display = mode === 'paper' ? '' : 'none';
+    if (fundingPanel) fundingPanel.style.display = mode === 'funding' ? '' : 'none';
+    console.log('[Funding] Tab switch:', mode, 'fundingPanel found:', !!fundingPanel);
     if (mode === 'paper' && state.activeContract) {
       loadPaperData(state.activeContract).then(() => {
         updatePaperPositionCard();
@@ -1732,11 +1736,13 @@ document.querySelectorAll('.funding-sub-tab').forEach(tab => {
 });
 
 async function loadFundingMonitor() {
+  console.log('[Funding] loadFundingMonitor called for', state.activeContract);
   if (!state.activeContract) return;
   const c = state.contracts.find(x => x.id === state.activeContract);
-  if (!c || c.asset !== 'brent') return;
+  if (!c || c.asset !== 'brent') { console.log('[Funding] Not brent'); return; }
   try {
     const data = await api(`/api/funding/summary/${state.activeContract}?position_size=${fundingState.positionSize}`);
+    console.log('[Funding] Summary loaded:', data.current_rate);
     fundingState.summary = data;
     renderFundingMonitor(data);
   } catch (e) {

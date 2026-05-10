@@ -91,6 +91,70 @@ CREATE INDEX IF NOT EXISTS idx_alor_candles_lookup
     ON alor_candles(contract_id, symbol, timeframe, timestamp_ms);
 CREATE INDEX IF NOT EXISTS idx_tick_log_contract 
     ON tick_log(contract_id, timestamp_ms);
+
+CREATE TABLE IF NOT EXISTS paper_settings (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    deposit REAL NOT NULL DEFAULT 15000,
+    leverage INTEGER NOT NULL DEFAULT 2,
+    entry_levels TEXT NOT NULL DEFAULT '[{"threshold":0.7,"sizePct":0.30},{"threshold":1.0,"sizePct":0.30},{"threshold":1.5,"sizePct":0.40}]',
+    max_hold_days INTEGER NOT NULL DEFAULT 10,
+    hard_stop REAL NOT NULL DEFAULT 2.0,
+    cooldown_days INTEGER NOT NULL DEFAULT 2,
+    moex_fee REAL NOT NULL DEFAULT 0.0002,
+    hl_fee REAL NOT NULL DEFAULT 0.00035,
+    slippage REAL NOT NULL DEFAULT 0.0003,
+    lookback_days INTEGER NOT NULL DEFAULT 10,
+    mode TEXT NOT NULL DEFAULT 'auto',
+    include_funding INTEGER NOT NULL DEFAULT 1,
+    updated_ms INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS paper_trades (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    contract_id TEXT NOT NULL,
+    side TEXT NOT NULL,
+    entry_timestamp_ms INTEGER NOT NULL,
+    exit_timestamp_ms INTEGER,
+    entry_level REAL,
+    entry_deviation REAL,
+    entry_spread REAL,
+    exit_spread REAL,
+    entry_moex REAL,
+    entry_hl REAL,
+    exit_moex REAL,
+    exit_hl REAL,
+    size REAL NOT NULL,
+    days_held REAL,
+    exit_reason TEXT,
+    gross_pnl REAL,
+    funding_total REAL DEFAULT 0,
+    entry_fees REAL DEFAULT 0,
+    exit_fees REAL DEFAULT 0,
+    net_pnl REAL,
+    status TEXT NOT NULL DEFAULT 'open',
+    created_ms INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS paper_funding (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    trade_id INTEGER NOT NULL,
+    timestamp_ms INTEGER NOT NULL,
+    rate REAL,
+    payment REAL,
+    UNIQUE(trade_id, timestamp_ms)
+);
+
+CREATE TABLE IF NOT EXISTS paper_equity (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    contract_id TEXT NOT NULL,
+    timestamp_ms INTEGER NOT NULL,
+    equity REAL NOT NULL,
+    UNIQUE(contract_id, timestamp_ms)
+);
+
+CREATE INDEX IF NOT EXISTS idx_paper_trades_contract ON paper_trades(contract_id, status, entry_timestamp_ms);
+CREATE INDEX IF NOT EXISTS idx_paper_funding_trade ON paper_funding(trade_id);
+CREATE INDEX IF NOT EXISTS idx_paper_equity_contract ON paper_equity(contract_id, timestamp_ms);
 """
 
 
@@ -579,5 +643,323 @@ def get_ticks(contract_id: str, limit: int = 100) -> list[dict]:
             (contract_id, limit),
         )
         return [dict(row) for row in cur.fetchall()]
+    finally:
+        conn.close()
+
+
+# ---------------------------------------------------------------------------
+# Paper Trading
+# ---------------------------------------------------------------------------
+def get_paper_settings() -> dict:
+    conn = _get_conn()
+    try:
+        row = conn.execute("SELECT * FROM paper_settings WHERE id = 1").fetchone()
+        if not row:
+            conn.execute(
+                """INSERT INTO paper_settings (id, updated_ms)
+                   VALUES (1, ?)""",
+                (int(__import__('time').time() * 1000),),
+            )
+            conn.commit()
+            row = conn.execute("SELECT * FROM paper_settings WHERE id = 1").fetchone()
+        return dict(row)
+    finally:
+        conn.close()
+
+
+def update_paper_settings(
+    deposit: float | None = None,
+    leverage: int | None = None,
+    entry_levels: str | None = None,
+    max_hold_days: int | None = None,
+    hard_stop: float | None = None,
+    cooldown_days: int | None = None,
+    moex_fee: float | None = None,
+    hl_fee: float | None = None,
+    slippage: float | None = None,
+    lookback_days: int | None = None,
+    mode: str | None = None,
+    include_funding: int | None = None,
+) -> None:
+    conn = _get_conn()
+    try:
+        with DB_LOCK:
+            fields = []
+            params = []
+            if deposit is not None:
+                fields.append("deposit = ?")
+                params.append(deposit)
+            if leverage is not None:
+                fields.append("leverage = ?")
+                params.append(leverage)
+            if entry_levels is not None:
+                fields.append("entry_levels = ?")
+                params.append(entry_levels)
+            if max_hold_days is not None:
+                fields.append("max_hold_days = ?")
+                params.append(max_hold_days)
+            if hard_stop is not None:
+                fields.append("hard_stop = ?")
+                params.append(hard_stop)
+            if cooldown_days is not None:
+                fields.append("cooldown_days = ?")
+                params.append(cooldown_days)
+            if moex_fee is not None:
+                fields.append("moex_fee = ?")
+                params.append(moex_fee)
+            if hl_fee is not None:
+                fields.append("hl_fee = ?")
+                params.append(hl_fee)
+            if slippage is not None:
+                fields.append("slippage = ?")
+                params.append(slippage)
+            if lookback_days is not None:
+                fields.append("lookback_days = ?")
+                params.append(lookback_days)
+            if mode is not None:
+                fields.append("mode = ?")
+                params.append(mode)
+            if include_funding is not None:
+                fields.append("include_funding = ?")
+                params.append(include_funding)
+            fields.append("updated_ms = ?")
+            params.append(int(__import__('time').time() * 1000))
+            params.append(1)
+            if fields:
+                sql = f"UPDATE paper_settings SET {', '.join(fields)} WHERE id = ?"
+                conn.execute(sql, params)
+                conn.commit()
+    finally:
+        conn.close()
+
+
+def get_paper_trades(contract_id: str, status: str | None = None, limit: int = 500) -> list[dict]:
+    conn = _get_conn()
+    try:
+        sql = "SELECT * FROM paper_trades WHERE contract_id = ?"
+        params: list = [contract_id]
+        if status:
+            sql += " AND status = ?"
+            params.append(status)
+        sql += " ORDER BY entry_timestamp_ms DESC LIMIT ?"
+        params.append(limit)
+        cur = conn.execute(sql, params)
+        return [dict(row) for row in cur.fetchall()]
+    finally:
+        conn.close()
+
+
+def get_paper_trade(trade_id: int) -> dict | None:
+    conn = _get_conn()
+    try:
+        row = conn.execute("SELECT * FROM paper_trades WHERE id = ?", (trade_id,)).fetchone()
+        return dict(row) if row else None
+    finally:
+        conn.close()
+
+
+def get_active_paper_trade(contract_id: str) -> dict | None:
+    conn = _get_conn()
+    try:
+        row = conn.execute(
+            "SELECT * FROM paper_trades WHERE contract_id = ? AND status = 'open' ORDER BY entry_timestamp_ms DESC LIMIT 1",
+            (contract_id,),
+        ).fetchone()
+        return dict(row) if row else None
+    finally:
+        conn.close()
+
+
+def insert_paper_trade(
+    contract_id: str,
+    side: str,
+    entry_timestamp_ms: int,
+    entry_level: float,
+    entry_deviation: float,
+    entry_spread: float,
+    entry_moex: float,
+    entry_hl: float,
+    size: float,
+    entry_fees: float,
+) -> int:
+    conn = _get_conn()
+    try:
+        with DB_LOCK:
+            cur = conn.execute(
+                """
+                INSERT INTO paper_trades
+                (contract_id, side, entry_timestamp_ms, entry_level, entry_deviation,
+                 entry_spread, entry_moex, entry_hl, size, entry_fees, status, created_ms)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', ?)
+                """,
+                (contract_id, side, entry_timestamp_ms, entry_level, entry_deviation,
+                 entry_spread, entry_moex, entry_hl, size, entry_fees,
+                 int(__import__('time').time() * 1000)),
+            )
+            conn.commit()
+            return cur.lastrowid
+    finally:
+        conn.close()
+
+
+def close_paper_trade(
+    trade_id: int,
+    exit_timestamp_ms: int,
+    exit_spread: float,
+    exit_moex: float,
+    exit_hl: float,
+    days_held: float,
+    exit_reason: str,
+    gross_pnl: float,
+    funding_total: float,
+    exit_fees: float,
+    net_pnl: float,
+) -> None:
+    conn = _get_conn()
+    try:
+        with DB_LOCK:
+            conn.execute(
+                """
+                UPDATE paper_trades SET
+                    exit_timestamp_ms = ?,
+                    exit_spread = ?,
+                    exit_moex = ?,
+                    exit_hl = ?,
+                    days_held = ?,
+                    exit_reason = ?,
+                    gross_pnl = ?,
+                    funding_total = ?,
+                    exit_fees = ?,
+                    net_pnl = ?,
+                    status = 'closed'
+                WHERE id = ?
+                """,
+                (exit_timestamp_ms, exit_spread, exit_moex, exit_hl, days_held,
+                 exit_reason, gross_pnl, funding_total, exit_fees, net_pnl, trade_id),
+            )
+            conn.commit()
+    finally:
+        conn.close()
+
+
+def delete_all_paper_trades(contract_id: str | None = None) -> None:
+    conn = _get_conn()
+    try:
+        with DB_LOCK:
+            if contract_id:
+                conn.execute("DELETE FROM paper_trades WHERE contract_id = ?", (contract_id,))
+                conn.execute("DELETE FROM paper_equity WHERE contract_id = ?", (contract_id,))
+            else:
+                conn.execute("DELETE FROM paper_trades")
+                conn.execute("DELETE FROM paper_funding")
+                conn.execute("DELETE FROM paper_equity")
+            conn.commit()
+    finally:
+        conn.close()
+
+
+def insert_paper_funding(trade_id: int, timestamp_ms: int, rate: float, payment: float) -> None:
+    conn = _get_conn()
+    try:
+        with DB_LOCK:
+            conn.execute(
+                """
+                INSERT OR IGNORE INTO paper_funding (trade_id, timestamp_ms, rate, payment)
+                VALUES (?, ?, ?, ?)
+                """,
+                (trade_id, timestamp_ms, rate, payment),
+            )
+            conn.commit()
+    finally:
+        conn.close()
+
+
+def get_paper_funding(trade_id: int) -> list[dict]:
+    conn = _get_conn()
+    try:
+        cur = conn.execute(
+            "SELECT * FROM paper_funding WHERE trade_id = ? ORDER BY timestamp_ms ASC",
+            (trade_id,),
+        )
+        return [dict(row) for row in cur.fetchall()]
+    finally:
+        conn.close()
+
+
+def insert_paper_equity(contract_id: str, timestamp_ms: int, equity: float) -> None:
+    conn = _get_conn()
+    try:
+        with DB_LOCK:
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO paper_equity (contract_id, timestamp_ms, equity)
+                VALUES (?, ?, ?)
+                """,
+                (contract_id, timestamp_ms, equity),
+            )
+            # Keep only last 5000 points per contract
+            conn.execute(
+                """
+                DELETE FROM paper_equity WHERE contract_id = ? AND id NOT IN (
+                    SELECT id FROM paper_equity WHERE contract_id = ? ORDER BY timestamp_ms DESC LIMIT 5000
+                )
+                """,
+                (contract_id, contract_id),
+            )
+            conn.commit()
+    finally:
+        conn.close()
+
+
+def get_paper_equity(contract_id: str, limit: int = 5000) -> list[dict]:
+    conn = _get_conn()
+    try:
+        cur = conn.execute(
+            "SELECT timestamp_ms, equity FROM paper_equity WHERE contract_id = ? ORDER BY timestamp_ms ASC LIMIT ?",
+            (contract_id, limit),
+        )
+        return [dict(row) for row in cur.fetchall()]
+    finally:
+        conn.close()
+
+
+def get_paper_summary(contract_id: str) -> dict:
+    conn = _get_conn()
+    try:
+        total = conn.execute(
+            "SELECT COUNT(*) as cnt FROM paper_trades WHERE contract_id = ? AND status = 'closed'",
+            (contract_id,),
+        ).fetchone()["cnt"]
+        wins = conn.execute(
+            "SELECT COUNT(*) as cnt FROM paper_trades WHERE contract_id = ? AND status = 'closed' AND net_pnl > 0",
+            (contract_id,),
+        ).fetchone()["cnt"]
+        losses = total - wins
+        pnl = conn.execute(
+            "SELECT SUM(net_pnl) as total FROM paper_trades WHERE contract_id = ? AND status = 'closed'",
+            (contract_id,),
+        ).fetchone()["total"]
+        gross = conn.execute(
+            "SELECT SUM(gross_pnl) as total FROM paper_trades WHERE contract_id = ? AND status = 'closed'",
+            (contract_id,),
+        ).fetchone()["total"]
+        funding = conn.execute(
+            "SELECT SUM(funding_total) as total FROM paper_trades WHERE contract_id = ? AND status = 'closed'",
+            (contract_id,),
+        ).fetchone()["total"]
+        fees = conn.execute(
+            "SELECT SUM(entry_fees + exit_fees) as total FROM paper_trades WHERE contract_id = ? AND status = 'closed'",
+            (contract_id,),
+        ).fetchone()["total"]
+        return {
+            "total_trades": total or 0,
+            "wins": wins or 0,
+            "losses": losses or 0,
+            "winrate": round(wins / total * 100, 1) if total else 0,
+            "net_pnl": round(pnl or 0, 2),
+            "gross_pnl": round(gross or 0, 2),
+            "funding_total": round(funding or 0, 2),
+            "fees_total": round(fees or 0, 2),
+        }
     finally:
         conn.close()

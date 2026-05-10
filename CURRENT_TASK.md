@@ -1,4 +1,44 @@
-# Текущая задача — Alor History Integration V3
+# Текущая задача — Paper Trading Module V3.5 (завершена)
+
+**Дата:** 2026-05-09  
+**Ветка:** `V3_prod` (локальные изменения, не запушены)  
+**Статус:** ✅ Деплой завершён, работает на mo-ex.online
+
+---
+
+## Что было сделано (Paper Trading)
+
+### Backend
+- **`backend/database.py`** — таблицы `paper_settings`, `paper_trades`, `paper_funding`, `paper_equity` + CRUD
+- **`backend/main.py`** — 10 новых endpoints с Pydantic моделями
+- **`backend/clients/hl_client.py`** — `fetch_funding_history()` для Hyperliquid
+
+### Frontend
+- **`frontend/index.html`** — вкладка Paper с 3 под-вкладками (Живая торговля / История / Настройки)
+- **`frontend/style.css`** — полный набор стилей paper trading
+- **`frontend/app.js`** — логика авто-торговли, ручного входа/выхода, ленты, графика эквити, экспорта CSV
+
+### Деплой на production
+- ✅ Файлы загружены на `155.212.183.185`
+- ✅ Backend скопирован в `backend/backend/`
+- ✅ Frontend скопирован в `backend/frontend/` (фикс nginx)
+- ✅ `dashboard.service` перезапущен, статус `active`
+- ✅ БД восстановлена из production backup (30.5 МБ)
+- ✅ Исторические данные на месте (BRM6/BRN6 апрель-май)
+- ✅ Paper Trading доступен после Ctrl+F5
+
+### Известные проблемы при деплое
+- nginx отдавал старую статику из `backend/frontend/` — исправлено копированием + reload nginx
+
+---
+
+## Решение по задаче
+
+Paper Trading деплоен и работает. Детальное тестирование авто-торговли и доработки UI отложены в **BACKLOG** (пункт 4).
+
+---
+
+## Предыдущая задача — Alor History Integration V3
 
 **Дата:** 2026-05-08  
 **Ветка:** `V3_prod` (запушена)  
@@ -145,4 +185,4 @@
 
 ---
 
-*Последнее обновление: 2026-05-08 12:00 UTC*
+*Последнее обновление: 2026-05-09 20:30 UTC*
