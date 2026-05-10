@@ -145,3 +145,85 @@ def fetch_current(coin: str) -> dict:
                     pass
 
     return snapshot
+
+
+# ---------------------------------------------------------------------------
+# Funding history
+# ---------------------------------------------------------------------------
+def fetch_funding_history(
+    coin: str,
+    start_ms: int,
+    end_ms: int | None = None,
+) -> list[dict]:
+    """
+    Fetch funding history from Hyperliquid.
+    coin: e.g. "xyz:BRENTOIL"
+    Returns list of {"timestamp_ms": int, "rate": float}.
+    """
+    payload = {
+        "type": "fundingHistory",
+        "coin": coin,
+        "startTime": start_ms,
+    }
+    if end_ms:
+        payload["endTime"] = end_ms
+
+    data = _post(payload)
+    if data is None:
+        return []
+
+    if not isinstance(data, list):
+        logger.warning("Unexpected HL funding response format: %s", type(data))
+        return []
+
+    results: list[dict] = []
+    for entry in data:
+        ts = entry.get("time")
+        rate_str = entry.get("fundingRate")
+        if ts is None or rate_str is None:
+            continue
+        try:
+            results.append(
+                {
+                    "timestamp_ms": int(ts),
+                    "rate": float(rate_str),
+                }
+            )
+        except (ValueError, TypeError):
+            continue
+
+    return results
+
+
+def fetch_funding_history_paginated(
+    coin: str,
+    start_ms: int,
+    end_ms: int | None = None,
+) -> list[dict]:
+    """
+    Fetch funding history with pagination. HL returns max ~500 records per call.
+    For hourly funding, 30 days = 720 records, so we may need 2 requests.
+    """
+    all_results: list[dict] = []
+    current_start = start_ms
+    final_end = end_ms or int(time.time() * 1000)
+    max_iterations = 10  # safety limit
+
+    for _ in range(max_iterations):
+        batch = fetch_funding_history(coin, current_start, final_end)
+        if not batch:
+            break
+        all_results.extend(batch)
+        # If we got fewer than 500, we have everything
+        if len(batch) < 500:
+            break
+        # Next batch starts from the last timestamp + 1ms
+        last_ts = batch[-1]["timestamp_ms"]
+        if last_ts >= final_end:
+            break
+        current_start = last_ts + 1
+        # Safety: avoid infinite loop if API returns same timestamp repeatedly
+        if current_start >= final_end:
+            break
+
+    return all_results

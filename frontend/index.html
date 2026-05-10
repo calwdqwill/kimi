@@ -7,7 +7,7 @@
 <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/static/style.css?v=5">
+<link rel="stylesheet" href="/static/style.css?v=6">
 </head>
 <body>
 <div id="app" class="app">
@@ -219,6 +219,7 @@
     <div class="table-tabs">
       <div class="table-tab active" data-tab="ticks">&#1058;&#1048;&#1050;&#1048;</div>
       <div class="table-tab" data-tab="paper">PAPER TRADE</div>
+      <div class="table-tab" data-tab="funding">&#128202; ФАНДИНГ</div>
       <div class="tick-count" id="tickCount">&#8212; &#1079;&#1072;&#1087;&#1080;&#1089;&#1077;&#1081;</div>
     </div>
     <div class="table-content" id="tableContent">
@@ -231,7 +232,378 @@
         </tbody>
       </table>
       <div class="paper-trade" id="paperTrade" style="display:none;">
-        <div class="paper-empty">Paper Trading &#8212; &#1074; &#1088;&#1072;&#1079;&#1088;&#1072;&#1073;&#1086;&#1090;&#1082;&#1077;</div>
+        <div class="paper-sub-tabs" id="paperSubTabs">
+          <div class="paper-sub-tab active" data-sub="live">&#1046;&#1080;&#1074;&#1072;&#1103; &#1090;&#1086;&#1088;&#1075;&#1086;&#1074;&#1083;&#1103;</div>
+          <div class="paper-sub-tab" data-sub="history">&#1048;&#1089;&#1090;&#1086;&#1088;&#1080;&#1103; &#1089;&#1076;&#1077;&#1083;&#1086;&#1082;</div>
+          <div class="paper-sub-tab" data-sub="settings">&#1053;&#1072;&#1089;&#1090;&#1088;&#1086;&#1081;&#1082;&#1080;</div>
+        </div>
+
+        <!-- LIVE TRADING -->
+        <div class="paper-pane active" data-pane="live">
+          <div class="paper-live-layout">
+            <div class="paper-left">
+              <div class="paper-status-bar">
+                <span class="paper-status-item"><span class="paper-dot green"></span>MOEX + HL</span>
+                <span class="paper-status-item" id="paperLastUpdate">&#1054;&#1073;&#1085;&#1086;&#1074;&#1083;&#1077;&#1085;&#1086;: --:--:--</span>
+                <span class="paper-status-item" id="paperAutoStatus">&#1040;&#1074;&#1090;&#1086;: OFF</span>
+              </div>
+
+              <div class="paper-mode-selector" id="paperModeSelector">
+                <button class="paper-mode-btn active" data-mode="auto">&#1040;&#1042;&#1058;&#1054;</button>
+                <button class="paper-mode-btn" data-mode="semi">&#1055;&#1054;&#1051;&#1059;</button>
+                <button class="paper-mode-btn" data-mode="manual">&#1056;&#1059;&#1063;&#1053;&#1054;&#1049;</button>
+              </div>
+
+              <div class="paper-position-card" id="paperPositionCard" style="display:none;">
+                <div class="paper-pos-header">
+                  <span class="paper-pos-title">&#128202; &#1040;&#1050;&#1058;&#1048;&#1042;&#1053;&#1040;&#1071; &#1055;&#1054;&#1047;&#1048;&#1062;&#1048;&#1071;</span>
+                  <span class="paper-pos-badge" id="paperPosSide">--</span>
+                </div>
+                <div class="paper-pos-row"><span>&#1042;&#1093;&#1086;&#1076;:</span><span id="paperPosEntry">--</span></div>
+                <div class="paper-pos-row"><span>&#1056;&#1072;&#1079;&#1084;&#1077;&#1088;:</span><span id="paperPosSize">--</span></div>
+                <div class="paper-pos-row"><span>MOEX:</span><span id="paperPosMoex">--</span></div>
+                <div class="paper-pos-row"><span>HL:</span><span id="paperPosHl">--</span></div>
+                <div class="paper-pos-row"><span>&#1057;&#1087;&#1088;&#1077;&#1076;:</span><span id="paperPosSpread">--</span></div>
+                <div class="paper-pos-row"><span>&#1044;&#1085;&#1077;&#1081;:</span><span id="paperPosDays">--</span></div>
+                <div class="paper-pos-divider"></div>
+                <div class="paper-pos-row"><span>P&L &#1089;&#1087;&#1088;&#1077;&#1076;&#1072;:</span><span id="paperPosGross">--</span></div>
+                <div class="paper-pos-row"><span>&#1060;&#1072;&#1085;&#1076;&#1080;&#1085;&#1075;:</span><span id="paperPosFunding">--</span></div>
+                <div class="paper-pos-row"><span>&#1050;&#1086;&#1084;&#1080;&#1089;&#1089;&#1080;&#1080;:</span><span id="paperPosFees">--</span></div>
+                <div class="paper-pos-divider"></div>
+                <div class="paper-pos-row paper-pos-net"><span>&#1063;&#1048;&#1057;&#1058;&#1067;&#1049; P&L:</span><span id="paperPosNet">--</span></div>
+                <div class="paper-pos-signal" id="paperPosSignal">--</div>
+                <button class="paper-close-btn" id="paperCloseBtn">&#1047;&#1040;&#1050;&#1056;&#1067;&#1058;&#1068; &#1055;&#1054;&#1047;&#1048;&#1062;&#1048;&#1070;</button>
+              </div>
+
+              <div class="paper-manual-panel" id="paperManualPanel" style="display:none;">
+                <div class="paper-form-row">
+                  <label>&#1057;&#1090;&#1086;&#1088;&#1086;&#1085;&#1072;</label>
+                  <div class="paper-toggle-group" id="paperManualSide">
+                    <button class="paper-toggle-btn active" data-side="long_spread">&#1051;&#1054;&#1053;&#1043; &#1057;&#1055;&#1056;&#1045;&#1044;&#1040;</button>
+                    <button class="paper-toggle-btn" data-side="short_spread">&#1064;&#1054;&#1056;&#1058; &#1057;&#1055;&#1056;&#1045;&#1044;&#1040;</button>
+                  </div>
+                </div>
+                <div class="paper-form-row">
+                  <label>&#1059;&#1088;&#1086;&#1074;&#1077;&#1085;&#1100; &#1074;&#1093;&#1086;&#1076;&#1072;</label>
+                  <div class="paper-toggle-group" id="paperManualLevel">
+                    <button class="paper-toggle-btn active" data-level="0.7">0.7%</button>
+                    <button class="paper-toggle-btn" data-level="1.0">1.0%</button>
+                    <button class="paper-toggle-btn" data-level="1.5">1.5%</button>
+                  </div>
+                </div>
+                <div class="paper-form-row">
+                  <label>&#1056;&#1072;&#1079;&#1084;&#1077;&#1088; &#1087;&#1086;&#1079;&#1080;&#1094;&#1080;&#1080; ($)</label>
+                  <input type="number" class="paper-input" id="paperManualSize" value="9000">
+                </div>
+                <button class="paper-open-btn" id="paperOpenBtn">&#1054;&#1058;&#1050;&#1056;&#1067;&#1058;&#1068; &#1055;&#1054;&#1047;&#1048;&#1062;&#1048;&#1070;</button>
+              </div>
+
+              <div class="paper-mini-stats" id="paperMiniStats">
+                <div class="paper-mini-card"><div class="paper-mini-label">P&L &#1089;&#1077;&#1075;&#1086;&#1076;&#1085;&#1103;</div><div class="paper-mini-value" id="paperStatToday">--</div></div>
+                <div class="paper-mini-card"><div class="paper-mini-label">&#1054;&#1090;&#1082;&#1088;&#1099;&#1090;&#1099;&#1093;</div><div class="paper-mini-value" id="paperStatOpen">0</div></div>
+                <div class="paper-mini-card"><div class="paper-mini-label">&#1042;&#1080;&#1085;&#1088;&#1077;&#1081;&#1090;</div><div class="paper-mini-value" id="paperStatWinrate">--</div></div>
+                <div class="paper-mini-card"><div class="paper-mini-label">&#1042;&#1089;&#1077;&#1075;&#1086; &#1095;&#1080;&#1089;&#1090;&#1099;&#1081;</div><div class="paper-mini-value" id="paperStatTotal">--</div></div>
+              </div>
+            </div>
+
+            <div class="paper-right">
+              <div class="paper-log-header">
+                <div class="paper-log-filters" id="paperLogFilters">
+                  <button class="paper-log-filter active" data-filter="all">&#1042;&#1057;&#1025;</button>
+                  <button class="paper-log-filter" data-filter="entry">&#1042;&#1061;&#1054;&#1044;&#1067;</button>
+                  <button class="paper-log-filter" data-filter="exit">&#1042;&#1067;&#1061;&#1054;&#1044;&#1067;</button>
+                  <button class="paper-log-filter" data-filter="funding">&#1060;&#1040;&#1053;&#1044;&#1048;&#1053;&#1043;</button>
+                </div>
+              </div>
+              <div class="paper-log" id="paperLog"></div>
+              <div class="paper-equity-chart-wrap">
+                <canvas id="paperEquityChart"></canvas>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- HISTORY -->
+        <div class="paper-pane" data-pane="history">
+          <div class="paper-history-filters">
+            <select class="paper-select" id="paperHistPeriod">
+              <option value="7">&#1055;&#1086;&#1089;&#1083;&#1077;&#1076;&#1085;&#1080;&#1077; 7 &#1076;&#1085;&#1077;&#1081;</option>
+              <option value="30">&#1055;&#1086;&#1089;&#1083;&#1077;&#1076;&#1085;&#1080;&#1077; 30 &#1076;&#1085;&#1077;&#1081;</option>
+              <option value="all">&#1042;&#1089;&#1105; &#1074;&#1088;&#1077;&#1084;&#1103;</option>
+            </select>
+            <select class="paper-select" id="paperHistSide">
+              <option value="all">&#1042;&#1089;&#1077; &#1089;&#1090;&#1086;&#1088;&#1086;&#1085;&#1099;</option>
+              <option value="long_spread">&#1051;&#1054;&#1053;&#1043;</option>
+              <option value="short_spread">&#1064;&#1054;&#1056;&#1058;</option>
+            </select>
+            <select class="paper-select" id="paperHistResult">
+              <option value="all">&#1042;&#1089;&#1077; &#1088;&#1077;&#1079;&#1091;&#1083;&#1100;&#1090;&#1072;&#1090;&#1099;</option>
+              <option value="win">&#1055;&#1088;&#1080;&#1073;&#1099;&#1083;&#1100;</option>
+              <option value="loss">&#1059;&#1073;&#1099;&#1090;&#1086;&#1082;</option>
+            </select>
+            <button class="paper-export-btn" id="paperExportBtn">&#1069;&#1082;&#1089;&#1087;&#1086;&#1088;&#1090; CSV</button>
+          </div>
+          <div class="paper-history-summary" id="paperHistorySummary">
+            <div class="paper-sum-card"><div class="paper-sum-label">&#1042;&#1089;&#1077;&#1075;&#1086; &#1089;&#1076;&#1077;&#1083;&#1086;&#1082;</div><div class="paper-sum-value" id="paperSumTotal">0</div></div>
+            <div class="paper-sum-card"><div class="paper-sum-label">&#1063;&#1080;&#1089;&#1090;&#1099;&#1081; P&L</div><div class="paper-sum-value" id="paperSumPnl">--</div></div>
+            <div class="paper-sum-card"><div class="paper-sum-label">&#1042;&#1080;&#1085;&#1088;&#1077;&#1081;&#1090;</div><div class="paper-sum-value" id="paperSumWinrate">--</div></div>
+            <div class="paper-sum-card"><div class="paper-sum-label">&#1060;&#1072;&#1085;&#1076;&#1080;&#1085;&#1075; &#1085;&#1077;&#1090;&#1090;&#1086;</div><div class="paper-sum-value" id="paperSumFunding">--</div></div>
+          </div>
+          <div class="paper-history-table-wrap">
+            <table class="paper-history-table">
+              <thead>
+                <tr>
+                  <th>#</th><th>&#1044;&#1072;&#1090;&#1072;</th><th>&#1057;&#1090;&#1086;&#1088;&#1086;&#1085;&#1072;</th><th>&#1059;&#1088;&#1086;&#1074;&#1077;&#1085;&#1100;</th>
+                  <th>&#1042;&#1093;. &#1086;&#1090;&#1082;&#1083;</th><th>&#1042;&#1099;&#1093;. &#1086;&#1090;&#1082;&#1083;</th><th>&#1059;&#1076;&#1077;&#1088;&#1078;</th>
+                  <th>P&L &#1089;&#1087;&#1088;&#1077;&#1076;&#1072;</th><th>&#1060;&#1072;&#1085;&#1076;</th><th>&#1050;&#1086;&#1084;</th><th>&#1063;&#1080;&#1089;&#1090;&#1099;&#1081;</th><th>&#1055;&#1088;&#1080;&#1095;&#1080;&#1085;&#1072;</th>
+                </tr>
+              </thead>
+              <tbody id="paperHistoryBody"><tr><td colspan="12" class="loading">&#1053;&#1077;&#1090; &#1076;&#1072;&#1085;&#1085;&#1099;&#1093;</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- SETTINGS -->
+        <div class="paper-pane" data-pane="settings">
+          <div class="paper-settings-grid">
+            <div class="paper-settings-section">
+              <h4>&#1050;&#1072;&#1087;&#1080;&#1090;&#1072;&#1083;</h4>
+              <div class="paper-form-row">
+                <label>&#1044;&#1077;&#1087;&#1086;&#1079;&#1080;&#1090; ($)</label>
+                <input type="number" class="paper-input" id="settDeposit" value="15000">
+              </div>
+              <div class="paper-form-row">
+                <label>&#1055;&#1083;&#1077;&#1095;&#1086;</label>
+                <div class="paper-toggle-group" id="settLeverage">
+                  <button class="paper-toggle-btn" data-lev="1">1x</button>
+                  <button class="paper-toggle-btn active" data-lev="2">2x</button>
+                  <button class="paper-toggle-btn" data-lev="3">3x</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="paper-settings-section">
+              <h4>&#1055;&#1088;&#1072;&#1074;&#1080;&#1083;&#1072; &#1074;&#1093;&#1086;&#1076;&#1072;</h4>
+              <div class="paper-form-row">
+                <label>&#1059;&#1088;&#1086;&#1074;&#1077;&#1085;&#1100; 1: &#1086;&#1090;&#1082;&#1083;&#1086;&#1085;&#1077;&#1085;&#1080;&#1077; (%)</label>
+                <input type="number" class="paper-input small" id="settLvl1Th" value="0.7" step="0.1">
+                <label class="inline">&#1076;&#1077;&#1087;&#1086;&#1079;&#1080;&#1090;&#1072; (%)</label>
+                <input type="number" class="paper-input small" id="settLvl1Size" value="30" step="1">
+              </div>
+              <div class="paper-form-row">
+                <label>&#1059;&#1088;&#1086;&#1074;&#1077;&#1085;&#1100; 2: &#1086;&#1090;&#1082;&#1083;&#1086;&#1085;&#1077;&#1085;&#1080;&#1077; (%)</label>
+                <input type="number" class="paper-input small" id="settLvl2Th" value="1.0" step="0.1">
+                <label class="inline">&#1076;&#1077;&#1087;&#1086;&#1079;&#1080;&#1090;&#1072; (%)</label>
+                <input type="number" class="paper-input small" id="settLvl2Size" value="30" step="1">
+              </div>
+              <div class="paper-form-row">
+                <label>&#1059;&#1088;&#1086;&#1074;&#1077;&#1085;&#1100; 3: &#1086;&#1090;&#1082;&#1083;&#1086;&#1085;&#1077;&#1085;&#1080;&#1077; (%)</label>
+                <input type="number" class="paper-input small" id="settLvl3Th" value="1.5" step="0.1">
+                <label class="inline">&#1076;&#1077;&#1087;&#1086;&#1079;&#1080;&#1090;&#1072; (%)</label>
+                <input type="number" class="paper-input small" id="settLvl3Size" value="40" step="1">
+              </div>
+            </div>
+
+            <div class="paper-settings-section">
+              <h4>&#1055;&#1088;&#1072;&#1074;&#1080;&#1083;&#1072; &#1074;&#1099;&#1093;&#1086;&#1076;&#1072;</h4>
+              <div class="paper-form-row">
+                <label>&#1052;&#1072;&#1082;&#1089; &#1091;&#1076;&#1077;&#1088;&#1078;&#1072;&#1085;&#1080;&#1077; (&#1076;&#1085;&#1077;&#1081;)</label>
+                <input type="number" class="paper-input" id="settMaxHold" value="10">
+              </div>
+              <div class="paper-form-row">
+                <label>&#1061;&#1072;&#1088;&#1076;-&#1089;&#1090;&#1086;&#1087; (%)</label>
+                <input type="number" class="paper-input" id="settHardStop" value="2.0" step="0.1">
+              </div>
+              <div class="paper-form-row">
+                <label>&#1050;&#1091;&#1083;&#1076;&#1072;&#1091;&#1085; (&#1076;&#1085;&#1077;&#1081;)</label>
+                <input type="number" class="paper-input" id="settCooldown" value="2">
+              </div>
+            </div>
+
+            <div class="paper-settings-section">
+              <h4>&#1047;&#1072;&#1090;&#1088;&#1072;&#1090;&#1099;</h4>
+              <div class="paper-form-row">
+                <label>&#1050;&#1086;&#1084;&#1080;&#1089;&#1089;&#1080;&#1103; MOEX (%)</label>
+                <input type="number" class="paper-input" id="settMoexFee" value="0.02" step="0.001">
+              </div>
+              <div class="paper-form-row">
+                <label>&#1050;&#1086;&#1084;&#1080;&#1089;&#1089;&#1080;&#1103; HL (%)</label>
+                <input type="number" class="paper-input" id="settHlFee" value="0.035" step="0.001">
+              </div>
+              <div class="paper-form-row">
+                <label>&#1055;&#1088;&#1086;&#1089;&#1082;&#1072;&#1083;&#1100;&#1079;&#1099;&#1074;&#1072;&#1085;&#1080;&#1077; (%)</label>
+                <input type="number" class="paper-input" id="settSlip" value="0.03" step="0.001">
+              </div>
+              <div class="paper-form-row">
+                <label class="paper-check"><input type="checkbox" id="settFunding" checked> &#1059;&#1095;&#1080;&#1090;&#1099;&#1074;&#1072;&#1090;&#1100; &#1092;&#1072;&#1085;&#1076;&#1080;&#1085;&#1075;</label>
+              </div>
+            </div>
+
+            <div class="paper-settings-section">
+              <h4>&#1044;&#1072;&#1085;&#1085;&#1099;&#1077;</h4>
+              <div class="paper-form-row">
+                <label>&#1051;&#1091;&#1082;&#1073;&#1101;&#1082; (&#1076;&#1085;&#1077;&#1081;)</label>
+                <input type="number" class="paper-input" id="settLookback" value="10">
+              </div>
+            </div>
+
+            <div class="paper-settings-section paper-danger">
+              <h4>&#1054;&#1087;&#1072;&#1089;&#1085;&#1072;&#1103; &#1079;&#1086;&#1085;&#1072;</h4>
+              <button class="paper-danger-btn" id="paperResetBtn">&#1057;&#1041;&#1056;&#1054;&#1057;&#1048;&#1058;&#1068; &#1042;&#1057;&#1045; &#1044;&#1040;&#1053;&#1053;&#1067;&#1045;</button>
+            </div>
+          </div>
+          <div class="paper-settings-actions">
+            <button class="paper-save-btn" id="paperSaveSettings">&#1057;&#1086;&#1093;&#1088;&#1072;&#1085;&#1080;&#1090;&#1100; &#1085;&#1072;&#1089;&#1090;&#1088;&#1086;&#1081;&#1082;&#1080;</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- FUNDING PANEL -->
+      <div class="funding-panel" id="fundingPanel" style="display:none;">
+        <div class="funding-sub-tabs" id="fundingSubTabs">
+          <div class="funding-sub-tab active" data-sub="monitor">Монитор</div>
+          <div class="funding-sub-tab" data-sub="calculator">Калькулятор</div>
+          <div class="funding-sub-tab" data-sub="analytics">Аналитика</div>
+        </div>
+
+        <!-- MONITOR -->
+        <div class="funding-pane active" data-pane="monitor">
+          <div class="funding-monitor-layout">
+            <div class="funding-cards" id="fundingMonitorCards">
+              <div class="funding-card">
+                <div class="funding-card-label">Текущий фандинг</div>
+                <div class="funding-card-value" id="fundingCurrentRate">&#8212;</div>
+                <div class="funding-card-sub" id="fundingCurrentSub">в час</div>
+                <div class="funding-card-timer" id="fundingNextPayment">Следующий: --:--:--</div>
+              </div>
+              <div class="funding-card">
+                <div class="funding-card-label">24 часа кумулятивно</div>
+                <div class="funding-card-value" id="funding24hSum">&#8212;</div>
+                <div class="funding-card-sub" id="funding24hSub">$0 на позицию $9K</div>
+              </div>
+              <div class="funding-card">
+                <div class="funding-card-label">Среднее за 7 дней</div>
+                <div class="funding-card-value" id="funding7dAvg">&#8212;</div>
+                <div class="funding-card-sub" id="funding7dSub">Поз: &#8212; | Нег: &#8212;</div>
+                <div class="funding-mini-bars" id="funding7dBars"></div>
+              </div>
+            </div>
+            <div class="funding-size-row">
+              <span class="funding-size-label">Размер позиции:</span>
+              <div class="funding-size-btns">
+                <button class="funding-size-btn" data-size="5000">$5K</button>
+                <button class="funding-size-btn active" data-size="9000">$9K</button>
+                <button class="funding-size-btn" data-size="12000">$12K</button>
+                <input type="number" class="funding-size-input" id="fundingSizeInput" value="9000">
+              </div>
+            </div>
+            <div class="funding-chart-wrap">
+              <canvas id="fundingMonitorChart"></canvas>
+            </div>
+            <div class="funding-impact">
+              <h4>Влияние фандинга на позицию</h4>
+              <table class="funding-table" id="fundingImpactTable">
+                <thead>
+                  <tr><th>Сторона</th><th>Текущая ставка</th><th>Оценка 24ч</th><th>Оценка 7д</th><th>Оценка 30д</th></tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- CALCULATOR -->
+        <div class="funding-pane" data-pane="calculator">
+          <div class="funding-calc-form">
+            <div class="funding-form-row">
+              <label>Дата от</label>
+              <input type="date" class="funding-input" id="fundingCalcFrom">
+              <label>Дата до</label>
+              <input type="date" class="funding-input" id="fundingCalcTo">
+            </div>
+            <div class="funding-form-row">
+              <label>Сторона позиции</label>
+              <div class="funding-btn-group" id="fundingCalcSide">
+                <button class="funding-btn active" data-side="short">ШОРТ HL</button>
+                <button class="funding-btn" data-side="long">ЛОНГ HL</button>
+                <button class="funding-btn" data-side="auto">АВТО</button>
+              </div>
+            </div>
+            <div class="funding-form-row">
+              <label>Размер позиции ($)</label>
+              <div class="funding-size-btns">
+                <button class="funding-size-btn" data-size="5000">$5K</button>
+                <button class="funding-size-btn active" data-size="9000">$9K</button>
+                <button class="funding-size-btn" data-size="12000">$12K</button>
+                <input type="number" class="funding-size-input" id="fundingCalcSize" value="9000">
+              </div>
+            </div>
+            <button class="funding-calc-btn" id="fundingCalcBtn">РАССЧИТАТЬ</button>
+          </div>
+          <div class="funding-calc-results" id="fundingCalcResults" style="display:none;">
+            <div class="funding-cards funding-result-cards">
+              <div class="funding-card"><div class="funding-card-label">Всего фандинга</div><div class="funding-card-value" id="fundingCalcTotal">&#8212;</div></div>
+              <div class="funding-card"><div class="funding-card-label">Среднее в день</div><div class="funding-card-value" id="fundingCalcAvg">&#8212;</div></div>
+              <div class="funding-card"><div class="funding-card-label">Лучший день</div><div class="funding-card-value" id="fundingCalcBest">&#8212;</div></div>
+              <div class="funding-card"><div class="funding-card-label">Худший день</div><div class="funding-card-value" id="fundingCalcWorst">&#8212;</div></div>
+            </div>
+            <div class="funding-chart-wrap">
+              <canvas id="fundingCalcChart"></canvas>
+            </div>
+            <div class="funding-table-header">
+              <h4>Разбивка по дням</h4>
+              <button class="funding-export-btn" id="fundingExportCsv">Экспорт CSV</button>
+            </div>
+            <div class="funding-table-wrap">
+              <table class="funding-table" id="fundingCalcTable">
+                <thead>
+                  <tr><th>Дата</th><th>Дневной кум</th><th>Платёж</th><th>Итого</th><th>Сигнал</th></tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- ANALYTICS -->
+        <div class="funding-pane" data-pane="analytics">
+          <div class="funding-analytics-grid" id="fundingAnalyticsGrid">
+            <div class="funding-card">
+              <div class="funding-card-label">Направленный сдвиг</div>
+              <div class="funding-card-value" id="fundingAnDir">&#8212;</div>
+              <div class="funding-card-sub">положительных ставок</div>
+              <div class="funding-donut-wrap"><canvas id="fundingDonutChart"></canvas></div>
+            </div>
+            <div class="funding-card">
+              <div class="funding-card-label">Волатильность</div>
+              <div class="funding-card-value" id="fundingAnVol">&#8212;</div>
+              <div class="funding-card-sub">стдотклон в час</div>
+              <div class="funding-sparkline-wrap"><canvas id="fundingSparkline"></canvas></div>
+            </div>
+            <div class="funding-card">
+              <div class="funding-card-label">Предсказуемость</div>
+              <div class="funding-card-value" id="fundingAnPred">&#8212;</div>
+              <div class="funding-card-sub">автокорреляция (1ч лаг)</div>
+              <div class="funding-analytics-text" id="fundingAnPredText">Mean reverting</div>
+            </div>
+            <div class="funding-card">
+              <div class="funding-card-label">Влияние на стратегию</div>
+              <div class="funding-card-value" id="fundingAnImpact">&#8212;</div>
+              <div class="funding-card-sub">edge в день при шорт bias</div>
+              <div class="funding-analytics-text" id="fundingAnImpactText">Net нейтрально для MR</div>
+            </div>
+          </div>
+          <div class="funding-analytics-charts">
+            <div class="funding-chart-box">
+              <h4>Корреляция фандинга и спреда</h4>
+              <div class="funding-chart-wrap"><canvas id="fundingCorrChart"></canvas></div>
+            </div>
+            <div class="funding-heatmap-box">
+              <h4>Тепловая карта (час × день недели)</h4>
+              <div class="funding-heatmap" id="fundingHeatmap"></div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -240,6 +612,6 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-<script src="/static/app.js?v=multiasset8"></script>
+<script src="/static/app.js?v=multiasset9"></script>
 </body>
 </html>

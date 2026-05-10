@@ -13,8 +13,9 @@ import threading
 import time
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Body
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
 from starlette.responses import FileResponse
 
 import database
@@ -709,3 +710,484 @@ def get_alor_history(contract_id: str, timeframe: str):
     symbol = contract["moex_symbol"].split("@")[0]
     candles = database.get_alor_candles(contract_id, symbol, timeframe)
     return candles
+
+
+# ---------------------------------------------------------------------------
+# API endpoints — Paper Trading
+# ---------------------------------------------------------------------------
+@app.get("/api/paper/settings")
+def get_paper_settings():
+    """Return paper trading settings."""
+    return database.get_paper_settings()
+
+
+class PaperSettingsUpdate(BaseModel):
+    deposit: float | None = None
+    leverage: int | None = None
+    entry_levels: str | None = None
+    max_hold_days: int | None = None
+    hard_stop: float | None = None
+    cooldown_days: int | None = None
+    moex_fee: float | None = None
+    hl_fee: float | None = None
+    slippage: float | None = None
+    lookback_days: int | None = None
+    mode: str | None = None
+    include_funding: int | None = None
+
+
+@app.post("/api/paper/settings")
+def post_paper_settings(body: PaperSettingsUpdate):
+    """Update paper trading settings."""
+    database.update_paper_settings(
+        deposit=body.deposit,
+        leverage=body.leverage,
+        entry_levels=body.entry_levels,
+        max_hold_days=body.max_hold_days,
+        hard_stop=body.hard_stop,
+        cooldown_days=body.cooldown_days,
+        moex_fee=body.moex_fee,
+        hl_fee=body.hl_fee,
+        slippage=body.slippage,
+        lookback_days=body.lookback_days,
+        mode=body.mode,
+        include_funding=body.include_funding,
+    )
+    return {"status": "ok"}
+
+
+@app.get("/api/paper/trades/{contract_id}")
+def get_paper_trades(contract_id: str, status: str | None = None, limit: int = 500):
+    """Return paper trades for a contract."""
+    return database.get_paper_trades(contract_id, status=status, limit=limit)
+
+
+class PaperEntry(BaseModel):
+    contract_id: str
+    side: str
+    entry_timestamp_ms: int
+    entry_level: float
+    entry_deviation: float
+    entry_spread: float
+    entry_moex: float
+    entry_hl: float
+    size: float
+    entry_fees: float
+
+
+class PaperExit(BaseModel):
+    exit_timestamp_ms: int
+    exit_spread: float
+    exit_moex: float
+    exit_hl: float
+    days_held: float
+    exit_reason: str
+    gross_pnl: float
+    funding_total: float
+    exit_fees: float
+    net_pnl: float
+
+
+class PaperEquityPoint(BaseModel):
+    timestamp_ms: int
+    equity: float
+
+
+@app.post("/api/paper/trades/entry")
+def post_paper_entry(body: PaperEntry):
+    """Open a new paper trade."""
+    trade_id = database.insert_paper_trade(
+        contract_id=body.contract_id,
+        side=body.side,
+        entry_timestamp_ms=body.entry_timestamp_ms,
+        entry_level=body.entry_level,
+        entry_deviation=body.entry_deviation,
+        entry_spread=body.entry_spread,
+        entry_moex=body.entry_moex,
+        entry_hl=body.entry_hl,
+        size=body.size,
+        entry_fees=body.entry_fees,
+    )
+    return {"status": "ok", "trade_id": trade_id}
+
+
+@app.post("/api/paper/trades/exit/{trade_id}")
+def post_paper_exit(trade_id: int, body: PaperExit):
+    """Close a paper trade."""
+    database.close_paper_trade(
+        trade_id=trade_id,
+        exit_timestamp_ms=body.exit_timestamp_ms,
+        exit_spread=body.exit_spread,
+        exit_moex=body.exit_moex,
+        exit_hl=body.exit_hl,
+        days_held=body.days_held,
+        exit_reason=body.exit_reason,
+        gross_pnl=body.gross_pnl,
+        funding_total=body.funding_total,
+        exit_fees=body.exit_fees,
+        net_pnl=body.net_pnl,
+    )
+    return {"status": "ok"}
+
+
+@app.get("/api/paper/active/{contract_id}")
+def get_paper_active(contract_id: str):
+    """Return active (open) paper trade for a contract."""
+    trade = database.get_active_paper_trade(contract_id)
+    if not trade:
+        return None
+    return trade
+
+
+@app.get("/api/paper/equity/{contract_id}")
+def get_paper_equity(contract_id: str, limit: int = 5000):
+    """Return equity curve for a contract."""
+    return database.get_paper_equity(contract_id, limit=limit)
+
+
+@app.post("/api/paper/equity/{contract_id}")
+def post_paper_equity(contract_id: str, body: PaperEquityPoint):
+    """Record an equity snapshot."""
+    database.insert_paper_equity(contract_id, body.timestamp_ms, body.equity)
+    return {"status": "ok"}
+
+
+@app.get("/api/paper/summary/{contract_id}")
+def get_paper_summary(contract_id: str):
+    """Return paper trading summary stats."""
+    return database.get_paper_summary(contract_id)
+
+
+class PaperReset(BaseModel):
+    contract_id: str | None = None
+
+
+@app.post("/api/paper/reset")
+def post_paper_reset(body: PaperReset | None = None):
+    """Reset paper trading data."""
+    cid = body.contract_id if body else None
+    database.delete_all_paper_trades(contract_id=cid)
+    return {"status": "ok"}
+
+
+@app.get("/api/funding/{contract_id}")
+def get_funding_history(contract_id: str, start_ms: int | None = None):
+    """Return Hyperliquid funding history for a contract."""
+    contract = database.get_contract(contract_id)
+    if not contract:
+        raise HTTPException(status_code=404, detail="Contract not found")
+
+    hl_coin = contract["hl_coin"]
+    if start_ms is None:
+        start_ms = int(time.time() * 1000) - 30 * 24 * 60 * 60 * 1000  # 30 days back
+
+    end_ms = int(time.time() * 1000)
+    history = hl_client.fetch_funding_history(hl_coin, start_ms, end_ms)
+    return {"contract_id": contract_id, "coin": hl_coin, "count": len(history), "history": history}
+
+
+# ---------------------------------------------------------------------------
+# Pydantic models for Funding Calculator
+# ---------------------------------------------------------------------------
+class FundingCalcRequest(BaseModel):
+    from_ms: int
+    to_ms: int
+    side: str  # "long" | "short" | "auto"
+    position_size: float = 9000.0
+
+
+# ---------------------------------------------------------------------------
+# Helpers for Funding
+# ---------------------------------------------------------------------------
+def _brent_only_check(contract: dict) -> None:
+    if contract.get("asset") != "brent":
+        raise HTTPException(status_code=400, detail="Funding analytics only available for Brent contracts")
+
+
+def _aggregate_funding_by_day(funding: list[dict]) -> list[dict]:
+    """Aggregate hourly funding records by calendar day."""
+    daily: dict = {}
+    for entry in funding:
+        ts = entry["timestamp_ms"]
+        dt = datetime.datetime.fromtimestamp(ts / 1000, tz=datetime.timezone.utc)
+        day_key = dt.strftime("%Y-%m-%d")
+        if day_key not in daily:
+            daily[day_key] = {"rates": [], "sum": 0.0}
+        daily[day_key]["rates"].append(entry["rate"])
+        daily[day_key]["sum"] += entry["rate"]
+    result = []
+    for day in sorted(daily.keys()):
+        result.append({"date": day, "rate_sum": daily[day]["sum"], "count": len(daily[day]["rates"])})
+    return result
+
+
+def _get_spread_for_funding(contract_id: str, moex_symbol: str, hl_coin: str, from_ms: int, to_ms: int) -> dict[int, float]:
+    """Return dict {timestamp_ms: spread_pct} aligned to hour for auto-mode."""
+    clean_sym = moex_symbol.split("@")[0]
+    tf = "60m"
+    if database.has_alor_candles(contract_id, clean_sym, tf):
+        moex = _get_moex_series(contract_id, moex_symbol, tf, from_ms=from_ms, limit=10000)
+        hl = database.get_candles_recent(contract_id, "hyperliquid", hl_coin, tf, from_ms=from_ms, limit=10000)
+    else:
+        start_ms = _contract_start_ms(database.get_contract(contract_id))
+        moex = _get_moex_series(contract_id, moex_symbol, tf, from_ms=start_ms, limit=10000)
+        hl = database.get_candles_recent(contract_id, "hyperliquid", hl_coin, tf, from_ms=start_ms, limit=10000)
+    synced = sync.strict_sync(moex, hl)
+    result: dict[int, float] = {}
+    for row in synced:
+        sp = spread.historical_spread_pct(row["hl_close"], row["moex_close"])
+        if sp is not None:
+            ts = row["timestamp_ms"]
+            hour_ts = ts - (ts % (60 * 60 * 1000))
+            result[hour_ts] = sp
+    return result
+
+
+def _pearson(x: list[float], y: list[float]) -> float:
+    n = len(x)
+    if n == 0:
+        return 0.0
+    mean_x = sum(x) / n
+    mean_y = sum(y) / n
+    num = sum((xi - mean_x) * (yi - mean_y) for xi, yi in zip(x, y))
+    den_x = sum((xi - mean_x) ** 2 for xi in x) ** 0.5
+    den_y = sum((yi - mean_y) ** 2 for yi in y) ** 0.5
+    if den_x == 0 or den_y == 0:
+        return 0.0
+    return num / (den_x * den_y)
+
+
+def _autocorr(series: list[float], lag: int = 1) -> float:
+    if len(series) <= lag:
+        return 0.0
+    x = series[:-lag]
+    y = series[lag:]
+    return _pearson(x, y)
+
+
+# ---------------------------------------------------------------------------
+# API endpoint — Funding Summary (Monitor tab)
+# ---------------------------------------------------------------------------
+@app.get("/api/funding/summary/{contract_id}")
+def get_funding_summary(contract_id: str, position_size: float = 9000.0):
+    cache_key = f"funding_summary:{contract_id}:{position_size}"
+    cached = _API_CACHE.get(cache_key)
+    if cached is not None:
+        return cached
+
+    contract = database.get_contract(contract_id)
+    if not contract:
+        raise HTTPException(status_code=404, detail="Contract not found")
+    _brent_only_check(contract)
+
+    hl_coin = contract["hl_coin"]
+    now_ms = int(time.time() * 1000)
+    start_ms = now_ms - 7 * 24 * 60 * 60 * 1000
+
+    history = hl_client.fetch_funding_history_paginated(hl_coin, start_ms, now_ms)
+    if not history:
+        return {
+            "contract_id": contract_id,
+            "current_rate": None,
+            "current_annualized": None,
+            "next_payment_ms": None,
+            "last_24h_sum": None,
+            "last_24h_usd": None,
+            "last_7d_avg_daily": None,
+            "positive_pct": None,
+            "history_24h": [],
+            "history_7d_daily": [],
+        }
+
+    history.sort(key=lambda x: x["timestamp_ms"])
+    current_rate = history[-1]["rate"]
+    current_annualized = current_rate * 24 * 365
+    next_hour = ((now_ms // (60 * 60 * 1000)) + 1) * (60 * 60 * 1000)
+
+    last_24h_start = now_ms - 24 * 60 * 60 * 1000
+    last_24h = [h for h in history if h["timestamp_ms"] >= last_24h_start]
+    last_24h_sum = sum(h["rate"] for h in last_24h)
+    last_24h_usd = last_24h_sum * position_size
+
+    daily = _aggregate_funding_by_day(history)
+    last_7d_avg_daily = sum(d["rate_sum"] for d in daily) / len(daily) if daily else 0.0
+    positive_count = sum(1 for h in history if h["rate"] > 0)
+    positive_pct = (positive_count / len(history) * 100) if history else 0.0
+
+    history_24h = [{"timestamp_ms": h["timestamp_ms"], "rate": h["rate"]} for h in last_24h]
+    history_7d_daily = [{"date": d["date"], "rate_sum": d["rate_sum"], "positive": d["rate_sum"] > 0} for d in daily]
+
+    result = {
+        "contract_id": contract_id,
+        "current_rate": round(current_rate, 6),
+        "current_annualized": round(current_annualized, 4),
+        "next_payment_ms": next_hour,
+        "last_24h_sum": round(last_24h_sum, 6),
+        "last_24h_usd": round(last_24h_usd, 2),
+        "last_7d_avg_daily": round(last_7d_avg_daily, 6),
+        "positive_pct": round(positive_pct, 1),
+        "history_24h": history_24h,
+        "history_7d_daily": history_7d_daily,
+    }
+    _API_CACHE.set(cache_key, result, ttl=60.0)
+    return result
+
+
+# ---------------------------------------------------------------------------
+# API endpoint — Funding Calculator
+# ---------------------------------------------------------------------------
+@app.post("/api/funding/calc/{contract_id}")
+def post_funding_calc(contract_id: str, body: FundingCalcRequest):
+    contract = database.get_contract(contract_id)
+    if not contract:
+        raise HTTPException(status_code=404, detail="Contract not found")
+    _brent_only_check(contract)
+
+    if body.side not in ("long", "short", "auto"):
+        raise HTTPException(status_code=400, detail="side must be long, short, or auto")
+
+    hl_coin = contract["hl_coin"]
+    funding = hl_client.fetch_funding_history_paginated(hl_coin, body.from_ms, body.to_ms)
+    if not funding:
+        raise HTTPException(status_code=400, detail="No funding data for selected period")
+
+    funding.sort(key=lambda x: x["timestamp_ms"])
+
+    side_per_hour: dict[int, str] = {}
+    if body.side == "auto":
+        spread_map = _get_spread_for_funding(contract_id, contract["moex_symbol"], hl_coin, body.from_ms, body.to_ms)
+        if spread_map:
+            spread_values = list(spread_map.values())
+            mean_spread = sum(spread_values) / len(spread_values)
+            for ts, sp in spread_map.items():
+                side_per_hour[ts] = "short" if sp > mean_spread else "long"
+
+    hourly_result = []
+    daily: dict = {}
+    for entry in funding:
+        ts = entry["timestamp_ms"]
+        rate = entry["rate"]
+        dt = datetime.datetime.fromtimestamp(ts / 1000, tz=datetime.timezone.utc)
+        day_key = dt.strftime("%Y-%m-%d")
+
+        if body.side == "auto":
+            hour_ts = ts - (ts % (60 * 60 * 1000))
+            side = side_per_hour.get(hour_ts, "long")
+        else:
+            side = body.side
+
+        sign = 1.0 if side == "short" else -1.0
+        payment = body.position_size * rate * sign
+
+        hourly_result.append({"timestamp_ms": ts, "rate": rate, "side": side, "payment": round(payment, 4)})
+
+        if day_key not in daily:
+            daily[day_key] = {"date": day_key, "rate_sum": 0.0, "payment_sum": 0.0, "count": 0, "signal": side}
+        daily[day_key]["rate_sum"] += rate
+        daily[day_key]["payment_sum"] += payment
+        daily[day_key]["count"] += 1
+        if daily[day_key]["signal"] != side:
+            daily[day_key]["signal"] = "mixed"
+
+    daily_breakdown = sorted(daily.values(), key=lambda x: x["date"])
+    running = 0.0
+    for d in daily_breakdown:
+        running += d["payment_sum"]
+        d["running_total"] = round(running, 2)
+
+    total_funding = sum(d["payment_sum"] for d in daily_breakdown)
+    avg_daily = total_funding / len(daily_breakdown) if daily_breakdown else 0.0
+    best_day = max(daily_breakdown, key=lambda x: x["payment_sum"]) if daily_breakdown else None
+    worst_day = min(daily_breakdown, key=lambda x: x["payment_sum"]) if daily_breakdown else None
+
+    return {
+        "contract_id": contract_id,
+        "position_size": body.position_size,
+        "side": body.side,
+        "total_funding": round(total_funding, 2),
+        "avg_daily": round(avg_daily, 2),
+        "best_day": {"date": best_day["date"], "payment": round(best_day["payment_sum"], 2), "rate_sum": round(best_day["rate_sum"], 6)} if best_day else None,
+        "worst_day": {"date": worst_day["date"], "payment": round(worst_day["payment_sum"], 2), "rate_sum": round(worst_day["rate_sum"], 6)} if worst_day else None,
+        "daily_breakdown": daily_breakdown,
+        "hourly": hourly_result,
+    }
+
+
+# ---------------------------------------------------------------------------
+# API endpoint — Funding Analytics
+# ---------------------------------------------------------------------------
+@app.get("/api/funding/analytics/{contract_id}")
+def get_funding_analytics(contract_id: str):
+    cache_key = f"funding_analytics:{contract_id}"
+    cached = _API_CACHE.get(cache_key)
+    if cached is not None:
+        return cached
+
+    contract = database.get_contract(contract_id)
+    if not contract:
+        raise HTTPException(status_code=404, detail="Contract not found")
+    _brent_only_check(contract)
+
+    hl_coin = contract["hl_coin"]
+    now_ms = int(time.time() * 1000)
+    start_ms = now_ms - 30 * 24 * 60 * 60 * 1000
+
+    funding = hl_client.fetch_funding_history_paginated(hl_coin, start_ms, now_ms)
+    if not funding:
+        raise HTTPException(status_code=400, detail="No funding data")
+
+    funding.sort(key=lambda x: x["timestamp_ms"])
+    rates = [h["rate"] for h in funding]
+
+    import statistics
+    positive_count = sum(1 for r in rates if r > 0)
+    negative_count = len(rates) - positive_count
+    positive_pct = (positive_count / len(rates) * 100) if rates else 0.0
+    negative_pct = (negative_count / len(rates) * 100) if rates else 0.0
+
+    hourly_std = statistics.stdev(rates) if len(rates) > 1 else 0.0
+    hourly_min = min(rates) if rates else 0.0
+    hourly_max = max(rates) if rates else 0.0
+    hourly_mean = sum(rates) / len(rates) if rates else 0.0
+    autocorr_1h = _autocorr(rates, lag=1)
+
+    spread_map = _get_spread_for_funding(contract_id, contract["moex_symbol"], hl_coin, start_ms, now_ms)
+    correlation = 0.0
+    spread_mean = 0.0
+    if spread_map:
+        matched_rates = []
+        matched_spreads = []
+        for h in funding:
+            ts = h["timestamp_ms"]
+            hour_ts = ts - (ts % (60 * 60 * 1000))
+            if hour_ts in spread_map:
+                matched_rates.append(h["rate"])
+                matched_spreads.append(spread_map[hour_ts])
+        if matched_rates and matched_spreads:
+            correlation = _pearson(matched_rates, matched_spreads)
+            spread_mean = sum(matched_spreads) / len(matched_spreads)
+
+    heatmap: list[list[list[float]]] = [[[] for _ in range(7)] for _ in range(24)]
+    for h in funding:
+        ts = h["timestamp_ms"]
+        dt = datetime.datetime.fromtimestamp(ts / 1000, tz=datetime.timezone.utc)
+        heatmap[dt.hour][dt.weekday()].append(h["rate"])
+
+    heatmap_avg = [[round(sum(heatmap[h][d]) / len(heatmap[h][d]), 6) if heatmap[h][d] else 0.0 for d in range(7)] for h in range(24)]
+
+    result = {
+        "contract_id": contract_id,
+        "positive_pct": round(positive_pct, 1),
+        "negative_pct": round(negative_pct, 1),
+        "hourly_std": round(hourly_std, 6),
+        "hourly_min": round(hourly_min, 6),
+        "hourly_max": round(hourly_max, 6),
+        "hourly_mean": round(hourly_mean, 6),
+        "autocorr_1h": round(autocorr_1h, 3),
+        "correlation_with_spread": round(correlation, 3),
+        "spread_mean": round(spread_mean, 4),
+        "hourly_heatmap": heatmap_avg,
+        "sample_count": len(rates),
+    }
+    _API_CACHE.set(cache_key, result, ttl=300.0)
+    return result
