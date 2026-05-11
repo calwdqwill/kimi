@@ -1,5 +1,21 @@
 # Changelog
 
+## 2026-05-11 — UI Cleanup & Contract Tabs V3.7
+
+### Frontend Improvements
+- **`frontend/index.html`** — объединены дублирующие карточки:
+  - Z-SCORE (LIVE) + ТОЧКА ВХОДА (±2σ) → одна карточка с разделителем
+  - SPREAD (MID, %) + ARB SPREAD (BID/ASK) → одна карточка с Mid/Arb строками
+  - Обновлён sidebar guide: убраны отдельные описания, добавлены описания объединённых блоков
+  - Cache busting: `style.css?v=8`, `app.js?v=multiasset11`
+- **`frontend/app.js`** — вкладки контрактов теперь показывают название месяца на русском + дату экспирации (экс: 01.ММ). Универсальный маппинг фьючерсных кодов (F=Январь...Z=Декабрь)
+- **`frontend/style.css`** — новые стили `.kpi-zscore-top`, `.kpi-zscore-divider`, `.kpi-spread-line`, `.tab-label-wrap`, `.tab-month`, `.tab-expiry`
+
+### Status
+- Правка 5 (USDT/RUB межбиржевой спред) — отложена в BACKLOG до нахождения стабильного API TokenSpot/Rapira
+
+---
+
 ## 2026-05-10 — Funding Calculator Module V3.6
 
 ### Phase 1: Backend Funding API
