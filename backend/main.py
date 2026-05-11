@@ -473,16 +473,31 @@ def get_current(contract_id: str):
 
     moex_bid = moex.get("best_bid")
     moex_ask = moex.get("best_ask")
+    moex_last = moex.get("last_price")
     hl_bid = hl.get("best_bid")
     hl_ask = hl.get("best_ask")
+    hl_last = hl.get("last_price")
 
     moex_mid = spread.mid(moex_bid, moex_ask)
     hl_mid = spread.mid(hl_bid, hl_ask)
+
+    # Fallback to last_price if bid/ask are stale (>1% deviation)
+    if moex_last and moex_mid and abs(moex_mid - moex_last) / moex_last > 0.01:
+        moex_mid = moex_last
+    if hl_last and hl_mid and abs(hl_mid - hl_last) / hl_last > 0.01:
+        hl_mid = hl_last
+
     cur_spread = None
     arb = None
     if moex_mid is not None and hl_mid is not None:
         cur_spread = spread.current_spread_pct(hl_mid, moex_mid)
-        arb = spread.arb_spread(hl_bid, hl_ask, moex_bid, moex_ask)
+        # Only compute arb if bid/ask look reasonable (<1% from last)
+        moex_bid_ok = not (moex_last and moex_bid and abs(moex_bid - moex_last) / moex_last > 0.01)
+        moex_ask_ok = not (moex_last and moex_ask and abs(moex_ask - moex_last) / moex_last > 0.01)
+        hl_bid_ok = not (hl_last and hl_bid and abs(hl_bid - hl_last) / hl_last > 0.01)
+        hl_ask_ok = not (hl_last and hl_ask and abs(hl_ask - hl_last) / hl_last > 0.01)
+        if moex_bid_ok and moex_ask_ok and hl_bid_ok and hl_ask_ok:
+            arb = spread.arb_spread(hl_bid, hl_ask, moex_bid, moex_ask)
 
     return {
         "moex": {
