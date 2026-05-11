@@ -207,7 +207,31 @@ function renderAssetTabs() {
   });
 }
 
-// // CONTRACT TABS// CONTRACT TABS
+// =============================================================================
+// CONTRACT TAB LABELS (Futures month mapping)
+// =============================================================================
+const FUTURES_MONTH_MAP = {
+  F: 'Январь', G: 'Февраль', H: 'Март', J: 'Апрель', K: 'Май',
+  M: 'Июнь', N: 'Июль', Q: 'Август', U: 'Сентябрь', V: 'Октябрь', X: 'Ноябрь', Z: 'Декабрь'
+};
+const FUTURES_MONTH_NUM = {
+  F: '01', G: '02', H: '03', J: '04', K: '05',
+  M: '06', N: '07', Q: '08', U: '09', V: '10', X: '11', Z: '12'
+};
+
+function getContractTabLabel(name) {
+  if (!name || name === 'TEST') return name;
+  const m = name.match(/([A-Z])(\d)$/);
+  if (!m) return name;
+  const letter = m[1];
+  const monthName = FUTURES_MONTH_MAP[letter];
+  const monthNum = FUTURES_MONTH_NUM[letter];
+  if (!monthName) return name;
+  return `<div class="tab-label-wrap"><div class="tab-month">${monthName}</div><div class="tab-expiry">экс: 01.${monthNum}</div></div>`;
+}
+
+// =============================================================================
+// CONTRACT TABS
 // =============================================================================
 function renderContractTabs() {
   const el = document.getElementById('contractTabs');
@@ -216,10 +240,11 @@ function renderContractTabs() {
   assetContracts.forEach(c => {
     const btn = document.createElement('button');
     btn.className = 'contract-tab' + (c.id === state.activeContract ? ' active' : '');
+    const label = getContractTabLabel(c.name);
     if (c.is_active && c.id === state.activeContract) {
-      btn.innerHTML = `${c.name}<span class="tab-dot"></span>`;
+      btn.innerHTML = label + '<span class="tab-dot"></span>';
     } else {
-      btn.textContent = c.name;
+      btn.innerHTML = label;
     }
     btn.onclick = () => setActiveContract(c.id);
     el.appendChild(btn);

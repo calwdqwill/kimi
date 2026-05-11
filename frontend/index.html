@@ -7,7 +7,7 @@
 <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/static/style.css?v=7">
+<link rel="stylesheet" href="/static/style.css?v=8">
 </head>
 <body>
 <div id="app" class="app">
@@ -35,11 +35,7 @@
       </div>
       <div class="sidebar-item">
         <span class="sidebar-bullet">&#8226;</span>
-        <div><strong>Spread (mid)</strong> — разница mid-price: HL &#8211; MOEX. Отрицательный = HL дешевле MOEX.</div>
-      </div>
-      <div class="sidebar-item">
-        <span class="sidebar-bullet">&#8226;</span>
-        <div><strong>Arb Spread</strong> — реальный исполнимый спред через bid/ask. Учитывает проскальзывание.</div>
+        <div><strong>Spread</strong> — объединённый блок. Mid: разница mid-price HL &#8211; MOEX. Arb: реальный исполнимый спред через bid/ask с учётом проскальзывания.</div>
       </div>
     </div>
 
@@ -59,15 +55,11 @@
       </div>
       <div class="sidebar-item">
         <span class="sidebar-bullet">&#8226;</span>
-        <div><strong>Z-Score</strong> — сколько &#963; текущий спред отстоит от среднего.<br>|Z| &lt; 1.0 — норма, без сигнала.<br>|Z| 1.5&#8211;2.0 — повышенное отклонение.<br>|Z| &gt; 2.0 — аномалия, точка входа!</div>
+        <div><strong>Z-Score (Live) + Точка входа (&#177;2&#963;)</strong> — объединённый блок. Z-Score показывает, сколько &#963; текущий спред отстоит от среднего.<br>|Z| &lt; 1.0 — норма. |Z| 1.5&#8211;2.0 — повышенное отклонение. |Z| &gt; 2.0 — аномалия, точка входа!<br>Нижняя граница: спред раздулся &#8594; купи HL + продай MOEX &#8594; жди возврата к среднему.<br>Верхняя граница: спред сжался &#8594; продай HL + купи MOEX &#8594; жди возврата к среднему.</div>
       </div>
       <div class="sidebar-item">
         <span class="sidebar-bullet">&#8226;</span>
         <div><strong>Min / Max</strong> — исторические экстремумы спреда за период.</div>
-      </div>
-      <div class="sidebar-item">
-        <span class="sidebar-bullet">&#8226;</span>
-        <div><strong>Точка входа (&#177;2&#963;)</strong> — ключевая метрика!<br>Нижняя граница: спред раздулся &#8594; купи HL + продай MOEX &#8594; жди возврата к среднему.<br>Верхняя граница: спред сжался &#8594; продай HL + купи MOEX &#8594; жди возврата к среднему.</div>
       </div>
     </div>
 
@@ -146,21 +138,32 @@
       <div class="kpi-value" id="kpiHlMid">$&#8212;</div>
       <div class="kpi-sub"><span class="bid" id="kpiHlBid">bid &#8212;</span> / <span class="ask" id="kpiHlAsk">ask &#8212;</span></div>
     </div>
-    <div class="kpi-card kpi-zscore">
+    <div class="kpi-card kpi-zscore" id="kpiZscoreCard">
       <div class="kpi-label">Z-SCORE (LIVE)</div>
-      <div class="kpi-value zscore-val" id="kpiZscore">&#8212;</div>
-      <div class="kpi-zscore-status" id="kpiZscoreStatus">
-        <span class="status-dot"></span><span id="kpiZscoreText">&#1047;&#1072;&#1075;&#1088;&#1091;&#1079;&#1082;&#1072;...</span>
+      <div class="kpi-zscore-top">
+        <div class="kpi-value zscore-val" id="kpiZscore">&#8212;</div>
+        <div class="kpi-zscore-status" id="kpiZscoreStatus">
+          <span class="status-dot"></span><span id="kpiZscoreText">&#1047;&#1072;&#1075;&#1088;&#1091;&#1079;&#1082;&#1072;...</span>
+        </div>
       </div>
+      <div class="kpi-zscore-divider"></div>
+      <div class="kpi-label">&#1058;&#1054;&#1063;&#1050;&#1040; &#1042;&#1061;&#1054;&#1044;&#1040; (&plusmn;2&sigma;)</div>
+      <div class="entry-badge" id="kpiEntrySignal">
+        <span class="signal-dot"></span>&#1047;&#1040;&#1043;&#1056;&#1059;&#1047;&#1050;&#1040;...
+      </div>
+      <div class="kpi-sub">&plusmn;2&sigma; &#1082;&#1086;&#1088;&#1080;&#1076;&#1086;&#1088;</div>
     </div>
     <div class="kpi-card kpi-spread">
-      <div class="kpi-label">SPREAD (MID, %)</div>
-      <div class="kpi-value negative" id="kpiSpreadPct">&#8212;</div>
-      <div class="kpi-sub" id="kpiSpread$">&#8212;</div>
-    </div>
-    <div class="kpi-card kpi-arb">
-      <div class="kpi-label">ARB SPREAD (BID/ASK)</div>
-      <div class="kpi-value negative" id="kpiArb">&#8212;</div>
+      <div class="kpi-label">SPREAD</div>
+      <div class="kpi-spread-line">
+        <span class="kpi-sub">Mid:</span>
+        <span class="kpi-value negative" id="kpiSpreadPct">&#8212;</span>
+        <span class="kpi-sub" id="kpiSpread$">&#8212;</span>
+      </div>
+      <div class="kpi-spread-line">
+        <span class="kpi-sub">Arb:</span>
+        <span class="kpi-sub" id="kpiArb">&#8212;</span>
+      </div>
       <div class="kpi-sub" id="kpiArbDir">&#8212;</div>
     </div>
     <div class="kpi-card kpi-ticks">
@@ -177,13 +180,6 @@
       <div class="kpi-label">MIN / MAX SPREAD %</div>
       <div class="kpi-value" id="kpiMinMax">&#8212;</div>
       <div class="kpi-sub" id="kpiMinMax$">&#8212;</div>
-    </div>
-    <div class="kpi-card kpi-entry" id="kpiEntry">
-      <div class="kpi-label">&#1058;&#1054;&#1063;&#1050;&#1040; &#1042;&#1061;&#1054;&#1044;&#1040; (&#177;2&#963;)</div>
-      <div class="entry-badge" id="kpiEntrySignal">
-        <span class="signal-dot"></span>&#1047;&#1040;&#1043;&#1056;&#1059;&#1047;&#1050;&#1040;...
-      </div>
-      <div class="kpi-sub">&#177;2&#963; &#1082;&#1086;&#1088;&#1080;&#1076;&#1086;&#1088;</div>
     </div>
   </div>
 
@@ -612,6 +608,6 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-<script src="/static/app.js?v=multiasset10"></script>
+<script src="/static/app.js?v=multiasset11"></script>
 </body>
 </html>

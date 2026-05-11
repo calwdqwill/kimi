@@ -358,6 +358,24 @@ body {
   background: var(--accent-green);
 }
 
+.tab-label-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  line-height: 1.25;
+}
+
+.tab-month {
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.tab-expiry {
+  font-size: 9px;
+  color: var(--text-muted);
+  margin-top: 1px;
+}
+
 .contract-tab.add-new {
   color: var(--text-muted);
   font-size: 11px;
@@ -511,6 +529,24 @@ body {
   gap: 5px;
   font-size: 10px;
   color: var(--text-secondary);
+}
+
+.kpi-zscore-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.kpi-zscore-divider {
+  border-top: 1px solid var(--border-subtle);
+  margin: 6px 0;
+}
+
+.kpi-spread-line {
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .status-dot {
