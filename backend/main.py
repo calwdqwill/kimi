@@ -300,15 +300,40 @@ def _load_hl_historical(contract_id: str, hl_coin: str, timeframe: str) -> None:
 
 
 def _load_alor_history(contract_id: str, moex_symbol: str, asset: str, timeframe: str) -> None:
-    """Load full previous+current Alor history if not already present."""
+    """Load full or incremental Alor history."""
     clean_symbol = moex_symbol.split("@")[0]
-    if database.has_alor_candles(contract_id, clean_symbol, timeframe):
+    if not database.has_alor_candles(contract_id, clean_symbol, timeframe):
+        try:
+            result = alor_history.load_full_history(contract_id, clean_symbol, asset, timeframe)
+            logger.info("Alor history loaded for %s %s: %d candles", contract_id, timeframe, result["loaded"])
+        except Exception as exc:
+            logger.warning("Alor history load failed for %s %s: %s", contract_id, timeframe, exc)
         return
-    try:
-        result = alor_history.load_full_history(contract_id, clean_symbol, asset, timeframe)
-        logger.info("Alor history loaded for %s %s: %d candles", contract_id, timeframe, result["loaded"])
-    except Exception as exc:
-        logger.warning("Alor history load failed for %s %s: %s", contract_id, timeframe, exc)
+
+    # Incremental: check if we're missing recent candles
+    last_ts = database.get_last_alor_timestamp(contract_id, clean_symbol, timeframe)
+    if not last_ts:
+        return
+
+    now_ms = int(time.time() * 1000)
+    tf_sec = alor_history.TF_TO_SECONDS.get(timeframe, 900)
+    if now_ms - last_ts > 2 * tf_sec * 1000:
+        try:
+            candles = alor_history.fetch_alor_ohlcv(
+                clean_symbol, timeframe,
+                last_ts + 1, now_ms,
+                untraded=False,
+            )
+            if candles:
+                rows = [
+                    (contract_id, clean_symbol, timeframe, c["timestamp_ms"],
+                     c["open"], c["high"], c["low"], c["close"], c["volume"], 0)
+                    for c in candles
+                ]
+                database.insert_alor_candles_batch(rows)
+                logger.info("Alor incremental for %s %s: +%d candles", contract_id, timeframe, len(rows))
+        except Exception as exc:
+            logger.warning("Alor incremental load failed for %s %s: %s", contract_id, timeframe, exc)
 
 
 def _get_moex_series(contract_id: str, moex_symbol: str, timeframe: str, from_ms: int | None = None, limit: int = 1500) -> list[dict]:
