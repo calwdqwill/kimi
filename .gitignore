@@ -1,0 +1,34 @@
+# Environment
+.env
+*.env
+
+# Virtual environment
+venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# Database (large, auto-generated)
+data/dashboard.db
+*.db-journal
+
+# Logs
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Nginx / Systemd backups
+nginx-config-backup.conf
+systemd-backup.service
+
+# Migration backups
+MIGRATION_NOTES.md
