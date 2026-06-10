@@ -154,6 +154,7 @@ async def log_errors(request, call_next):
 _stop_event = threading.Event()
 _poll_thread: threading.Thread | None = None
 _history_thread: threading.Thread | None = None
+_telegram_bot_thread: threading.Thread | None = None
 
 
 def _poll_contract(contract: dict) -> None:
@@ -279,12 +280,119 @@ def _history_loop() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Telegram bot command loop
+# ---------------------------------------------------------------------------
+def _telegram_bot_loop() -> None:
+    """Poll Telegram messages and respond to commands."""
+    _stop_event.wait(5)
+    offset = 0
+    logger.info("Telegram bot loop started")
+    while not _stop_event.is_set():
+        try:
+            updates = telegram_client.get_updates(offset)
+            for update in updates:
+                offset = max(offset, update["update_id"] + 1)
+                msg = update.get("message", {})
+                text = (msg.get("text") or "").strip().lower()
+                chat_id = msg.get("chat", {}).get("id")
+                if not text or not chat_id:
+                    continue
+
+                if text in ("/spread", "/спред", "спред"):
+                    _reply_spread(chat_id)
+                elif text in ("/all", "/все", "все"):
+                    _reply_all_spreads(chat_id)
+                elif text.startswith("/select "):
+                    cid = text.split(maxsplit=1)[1].strip().lower()
+                    _reply_select_contract(cid, chat_id)
+                elif text in ("/help", "/помощь", "помощь", "?"):
+                    _reply_help(chat_id)
+        except Exception as exc:
+            logger.debug("Telegram bot loop error: %s", exc)
+        _stop_event.wait(5)
+
+
+def _reply_spread(chat_id: int) -> None:
+    global _selected_contract_id
+    cid = _selected_contract_id
+    if not cid:
+        telegram_client.send_message("❌ Не выбран контракт. Используйте /select <contract_id>", chat_id=str(chat_id))
+        return
+    contract = database.get_contract(cid)
+    if not contract:
+        telegram_client.send_message(f"❌ Контракт {cid} не найден", chat_id=str(chat_id))
+        return
+    _send_current_spread(contract, chat_id)
+
+
+def _send_current_spread(contract: dict, chat_id: int) -> None:
+    cid = contract["id"]
+    moex = database.get_current(cid, "moex", contract["moex_symbol"]) or {}
+    hl = database.get_current(cid, "hyperliquid", contract["hl_coin"]) or {}
+    moex_mid = spread.mid(moex.get("best_bid"), moex.get("best_ask"))
+    hl_mid = spread.mid(hl.get("best_bid"), hl.get("best_ask"))
+    if moex_mid is None or hl_mid is None:
+        telegram_client.send_message(f"⚠️ {cid.upper()}: нет данных", chat_id=str(chat_id))
+        return
+    sp_pct = spread.current_spread_pct(hl_mid, moex_mid)
+    emoji = "🔴" if abs(sp_pct) >= 1.5 else "🟢" if abs(sp_pct) >= 1.0 else "🟡" if abs(sp_pct) >= 0.5 else "⚪"
+    text = f"{emoji} <b>{cid.upper()}</b>\nСпред: <b>{sp_pct:+.2f}%</b>\nMOEX: {moex_mid:.4f}\nHL: {hl_mid:.4f}"
+    telegram_client.send_message(text, chat_id=str(chat_id))
+
+
+def _reply_all_spreads(chat_id: int) -> None:
+    contracts = database.get_contracts()
+    active = [c for c in contracts if c.get("is_active")]
+    lines = ["📊 <b>Активные контракты</b>"]
+    for contract in active:
+        cid = contract["id"]
+        moex = database.get_current(cid, "moex", contract["moex_symbol"]) or {}
+        hl = database.get_current(cid, "hyperliquid", contract["hl_coin"]) or {}
+        moex_mid = spread.mid(moex.get("best_bid"), moex.get("best_ask"))
+        hl_mid = spread.mid(hl.get("best_bid"), hl.get("best_ask"))
+        if moex_mid is not None and hl_mid is not None:
+            sp_pct = spread.current_spread_pct(hl_mid, moex_mid)
+            emoji = "🔴" if abs(sp_pct) >= 1.5 else "🟢" if abs(sp_pct) >= 1.0 else "🟡" if abs(sp_pct) >= 0.5 else "⚪"
+            marker = " ✅" if cid == _selected_contract_id else ""
+            lines.append(f"{emoji} {cid.upper()}: {sp_pct:+.2f}%{marker}")
+        else:
+            lines.append(f"⚪ {cid.upper()}: нет данных")
+    telegram_client.send_message("\n".join(lines), chat_id=str(chat_id))
+
+
+def _reply_select_contract(contract_id: str, chat_id: int) -> None:
+    global _selected_contract_id
+    contract = database.get_contract(contract_id)
+    if not contract:
+        telegram_client.send_message(f"❌ Контракт {contract_id} не найден", chat_id=str(chat_id))
+        return
+    if not contract.get("is_active"):
+        telegram_client.send_message(f"⚠️ Контракт {contract_id} не активен", chat_id=str(chat_id))
+        return
+    _selected_contract_id = contract_id
+    logger.info("Selected contract changed to: %s (via Telegram)", contract_id)
+    telegram_client.send_message(f"✅ Выбран контракт: <b>{contract_id.upper()}</b>", chat_id=str(chat_id))
+
+
+def _reply_help(chat_id: int) -> None:
+    text = (
+        "🤖 <b>Команды бота</b>\n\n"
+        "/spread — текущий спред выбранного контракта\n"
+        "/all — спреды всех активных контрактов\n"
+        "/select &lt;id&gt; — выбрать контракт для сигналов\n"
+        "/help — эта справка\n\n"
+        f"Сейчас выбран: <b>{(_selected_contract_id or '—').upper()}</b>"
+    )
+    telegram_client.send_message(text, chat_id=str(chat_id))
+
+
+# ---------------------------------------------------------------------------
 # Startup / Shutdown
 # ---------------------------------------------------------------------------
 @app.on_event("startup")
 def _startup() -> None:
     database.init_db()
-    global _poll_thread, _history_thread, _selected_contract_id
+    global _poll_thread, _history_thread, _telegram_bot_thread, _selected_contract_id
     _stop_event.clear()
 
     # Initialize selected contract to first active one
@@ -298,6 +406,8 @@ def _startup() -> None:
     _poll_thread.start()
     _history_thread = threading.Thread(target=_history_loop, daemon=True)
     _history_thread.start()
+    _telegram_bot_thread = threading.Thread(target=_telegram_bot_loop, daemon=True)
+    _telegram_bot_thread.start()
 
 
 @app.on_event("shutdown")
@@ -307,6 +417,8 @@ def _shutdown() -> None:
         _poll_thread.join(timeout=3.0)
     if _history_thread is not None:
         _history_thread.join(timeout=5.0)
+    if _telegram_bot_thread is not None:
+        _telegram_bot_thread.join(timeout=3.0)
 
 
 # ---------------------------------------------------------------------------

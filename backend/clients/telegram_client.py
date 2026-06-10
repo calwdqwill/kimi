@@ -14,6 +14,25 @@ logger = logging.getLogger(__name__)
 _CLIENT_TIMEOUT = httpx.Timeout(15.0, connect=5.0)
 
 
+def get_updates(offset: int = 0, limit: int = 10) -> list[dict]:
+    """Fetch pending messages from Telegram Bot API (long-polling style)."""
+    token = TELEGRAM_BOT_TOKEN
+    if not token:
+        return []
+    url = f"https://api.telegram.org/bot{token}/getUpdates"
+    params = {"offset": offset, "limit": limit}
+    try:
+        with httpx.Client(timeout=_CLIENT_TIMEOUT) as client:
+            resp = client.get(url, params=params)
+            resp.raise_for_status()
+            data = resp.json()
+            if data.get("ok"):
+                return data.get("result", [])
+    except Exception as exc:
+        logger.debug("Telegram getUpdates failed: %s", exc)
+    return []
+
+
 def send_message(text: str, chat_id: Optional[str] = None) -> bool:
     """
     Send a Telegram message via Bot API.
