@@ -1,86 +1,40 @@
-# Текущая задача — Telegram Signals V3.8 (завершена локально, деплой на сервер)
+# Текущая задача — UI Cleanup V3.9 (завершена)
 
 **Дата:** 2026-06-10  
 **Ветка:** `V2.0_prod`  
-**Статус:** ✅ Код закоммичен и запушен на GitHub, ждёт деплоя на сервер
+**Статус:** ✅ Закоммичено, запушено, задеплоено на mo-ex.online
 
 ---
 
 ## Что было сделано
 
-### Backend
-- **`backend/clients/telegram_client.py`** — клиент для отправки сообщений через Telegram Bot API (HTML parse mode, таймауты, обработка ошибок)
-- **`backend/config.py`** — добавлены `TELEGRAM_BOT_TOKEN` и `TELEGRAM_CHAT_ID` из `.env`
-- **`backend/main.py`** — полная интеграция сигналов:
-  - 3 уровня сигналов по модулю спреда: 🟡 0.5%, 🟢 1.0%, 🔴 1.5%
-  - Антиспам: максимум 1 сигнал на уровень в 5 минут (`_SIGNAL_COOLDOWN_MS`)
-  - Сигналы отправляются только для **выбранного контракта** (`_selected_contract_id`)
-  - Инициализация: первый активный контракт выбирается автоматически при старте
-  - API:
-    - `GET /api/test-telegram?chat_id=` — тестовое сообщение
-    - `GET /api/selected-contract` — текущий контракт для сигналов
-    - `POST /api/selected-contract?contract_id=` — смена контракта
+### Telegram Signals V3.8
+- `backend/clients/telegram_client.py` — Bot API клиент (sendMessage + getUpdates)
+- `backend/main.py` — сигналы по уровням спреда (0.5/1.0/1.5%) + антиспам 5 мин + команды бота
+- Деплой на сервер `2.25.143.143` — mo-ex.service перезапущен, токен и chat_id в .env
+- Тестовые сообщения отправлены успешно, бот отвечает на команды в ЛС и группах
 
-### Конфиг
-- Добавлен контракт **BRQ6** (Brent Aug 2026) в `DEFAULT_CONTRACTS`
+### Contract Cleanup
+- Добавлены: BRU6 (Brent Sep), GNU6 (Gold Sep), S1U6 (Silver Sep)
+- Отключены: BRK6, GNN6, S1N6, GNM6, S1M6
+- Удалены дубликаты: BRQ6 (uppercase), test123
+- Итого активных: BRM6, BRN6, BRQ6, BRU6, GNU6, S1U6
 
----
-
-## Деплой на production (чек-лист)
-
-- [ ] Скопировать файлы на сервер `155.212.183.185`:
-  - `backend/main.py`
-  - `backend/config.py`
-  - `backend/clients/telegram_client.py`
-- [ ] Добавить в `/opt/dashboard/backend/backend/.env`:
-  ```
-  TELEGRAM_BOT_TOKEN=your_bot_token_here
-  TELEGRAM_CHAT_ID=your_chat_id_here
-  ```
-- [ ] Перезапустить сервис: `sudo systemctl restart dashboard`
-- [ ] Проверить логи: `sudo journalctl -u dashboard -f`
-- [ ] Отправить тест: `curl https://mo-ex.online/api/test-telegram`
+### UI Cleanup V3.9
+- **SPREAD STATS** — объединены KPI карточки Median + Min/Max в одну
+  - Median: большой шрифт (17px)
+  - Min/Max: компактный шрифт (13px)
+  - Доллары: sub (10px)
+- **Кнопка скрытия гайда** — `✕` в шапке гайда, сохранение состояния в localStorage
+- **Фильтр контрактов** — `renderContractTabs()` теперь показывает только активные контракты (убраны мини/expired)
+- Cache busting: `style.css?v=10`, `app.js?v=multiasset13`
 
 ---
 
-## Тестирование
+## Следующая задача
 
-### Локально
-```bash
-# 1. Запустить backend
-cd backend
-uvicorn main:app --reload --port 8000
-
-# 2. Проверить текущий спред (разовая команда)
-curl http://localhost:8000/api/current/brm6
-
-# 3. Отправить тестовое сообщение в Telegram
-curl http://localhost:8000/api/test-telegram
-
-# 4. Посмотреть/сменить выбранный контракт
-curl http://localhost:8000/api/selected-contract
-curl -X POST "http://localhost:8000/api/selected-contract?contract_id=brn6"
-```
-
-### На сервере (после деплоя)
-```bash
-curl https://mo-ex.online/api/test-telegram
-curl https://mo-ex.online/api/current/brm6
-curl https://mo-ex.online/api/selected-contract
-```
+См. `BACKLOG.md` — рекомендуется **Range selector на графике** (Задача 1, высокий приоритет, низкая сложность).
 
 ---
 
-## Предыдущая задача — Paper Trading Module V3.5 (завершена)
-
-*См. историю в предыдущих версиях файла.*
-
----
-
-## План на следующие задачи
-
-См. `BACKLOG.md` — приоритеты не изменились, Telegram (#3) теперь ✅.
-
----
-
-*Последнее обновление: 2026-06-10*
+*Последнее обновление: 2026-06-10 23:59*

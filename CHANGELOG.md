@@ -1,5 +1,38 @@
 # Changelog
 
+## 2026-06-10 — Telegram Signals V3.8 + UI Cleanup V3.9
+
+### Telegram Bot Integration
+- **`backend/clients/telegram_client.py`** — новый клиент для Telegram Bot API (sendMessage, getUpdates)
+- **`backend/main.py`** — интеграция сигналов и команд:
+  - 3 уровня сигналов по модулю спреда: 🟡 0.5%, 🟢 1.0%, 🔴 1.5%
+  - Антиспам: 1 сигнал на уровень в 5 минут (`_SIGNAL_COOLDOWN_MS`)
+  - Сигналы только для выбранного контракта (`_selected_contract_id`)
+  - API: `GET /api/test-telegram`, `GET/POST /api/selected-contract`
+  - Telegram bot commands: `/spread`, `/all`, `/select <id>`, `/help` (polling loop)
+- **Deploy**: mo-ex.service на `2.25.143.143`, `.env` с `TELEGRAM_BOT_TOKEN` и `TELEGRAM_CHAT_ID`
+
+### Contract Cleanup (DB + Config)
+- Добавлены: `BRU6` (Brent Sep), `GNU6` (Gold Sep), `S1U6` (Silver Sep)
+- Отключены (expired): `BRK6`, `GNN6`, `S1N6`, `GNM6`, `S1M6`
+- Удалены дубликаты: `BRQ6` (uppercase), `test123`
+- Активные контракты: BRM6, BRN6, BRQ6, BRU6, GNU6, S1U6
+
+### UI Cleanup V3.9
+- **`frontend/index.html`**:
+  - Объединены KPI карточки Median + Min/Max → `SPREAD STATS` (единая карточка)
+  - Добавлена кнопка `✕` для сворачивания гайда (`sidebarToggle`)
+  - Cache busting: `style.css?v=10`, `app.js?v=multiasset13`
+- **`frontend/app.js`**:
+  - `renderContractTabs()` — фильтр только активных контрактов (убраны мини/expired)
+  - `initSidebarToggle()` — toggle гайда с сохранением в `localStorage`
+  - `updateStats()` — обновление объединённой карточки SPREAD STATS
+- **`frontend/style.css`**:
+  - Стили `.sidebar-toggle`, `.sidebar.collapsed`
+  - Стили `.kpi-value.compact` для Min/Max в SPREAD STATS
+
+---
+
 ## 2026-05-11 — UI Cleanup & Contract Tabs V3.7
 
 ### Frontend Improvements
@@ -170,7 +203,7 @@
 - **Cache busting** обновлён: `app.js?v=multiasset8`, `style.css?v=5`
 
 ### Phase 3: VPS Deploy & Critical Fix
-- Загружены 6 файлов на сервер `155.212.183.185`
+- Загружены 6 файлы на сервер `155.212.183.185`
 - **Критический фикс:** `dashboard.service` запускается из `/opt/dashboard/backend/backend/`, файлы грузились в `/opt/dashboard/backend/` → скопированы в правильную директорию
 - Активированы `brm6/brk6/brn6` (full Brent), деактивированы `bmm6/bmk6/bmn6` (mini Brent)
 
@@ -193,8 +226,8 @@
 | BRM6 | 15m | 1888 | 2 апр → 8 мая |
 | BRM6 | 60m | 493 | 2 апр → 8 мая |
 | BRN6 | 5m | 3022 | 17 апр → 8 мая |
-| BRN6 | 15m | 1284 | 15 апр → 8 мая |
-| BRN6 | 60m | 336 | 15 апр → 8 мая |
+| BRN6 | 15m | 1284 | 15 апреля → 8 мая |
+| BRN6 | 60m | 336 | 15 апреля → 8 мая |
 
 ### Git Branches
 - `V3_prod` — продакшн-ветка (Alor Integration + Data Gap Fixes)
