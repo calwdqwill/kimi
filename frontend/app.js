@@ -539,6 +539,21 @@ function initRangeSlider() {
   updateSliderUI();
 }
 
+function initSidebarToggle() {
+  const btn = document.getElementById('sidebarToggle');
+  const sidebar = document.querySelector('.sidebar');
+  if (!btn || !sidebar) return;
+
+  // Restore state from localStorage
+  const collapsed = localStorage.getItem('sidebarCollapsed') === 'true';
+  if (collapsed) sidebar.classList.add('collapsed');
+
+  btn.addEventListener('click', () => {
+    sidebar.classList.toggle('collapsed');
+    localStorage.setItem('sidebarCollapsed', sidebar.classList.contains('collapsed'));
+  });
+}
+
 // =============================================================================
 // CHART ZOOM (mouse wheel)
 // =============================================================================
@@ -746,12 +761,16 @@ function updateStats() {
 
   const currentData = cache.currentData;
 
+  const moexMid = currentData?.moex?.mid || 95;
   document.getElementById('kpiMedian').textContent = fmtPct(s.median);
   document.getElementById('kpiMedian').className = 'kpi-value ' + (s.median < 0 ? 'negative' : '');
-  document.getElementById('kpiMedian$').textContent = '$ ' + fmtN(s.median / 100 * (currentData?.moex?.mid || 95), 3);
 
   document.getElementById('kpiMinMax').textContent = fmtPct(s.min) + ' / ' + fmtPct(s.max);
-  document.getElementById('kpiMinMax$').textContent = '$' + fmtN(s.min / 100 * (currentData?.moex?.mid || 95), 2) + ' / $' + fmtN(s.max / 100 * (currentData?.moex?.mid || 95), 2);
+
+  document.getElementById('kpiStat$').textContent =
+    'Med $' + fmtN(s.median / 100 * moexMid, 2) +
+    ' | Min $' + fmtN(s.min / 100 * moexMid, 2) +
+    ' / Max $' + fmtN(s.max / 100 * moexMid, 2);
 
   // Live Z-Score
   const z = cache.signalData;
@@ -1019,7 +1038,8 @@ async function init() {
     await loadPaperSettings();
     await refreshAll();
     initRangeSlider();
-    initPaperEquityChart();
+  initSidebarToggle();
+  initPaperEquityChart();
     if (state.activeContract) await loadPaperData(state.activeContract);
     updatePaperPositionCard();
   } catch (e) {

@@ -79,6 +79,27 @@ body {
   border-bottom: 1px solid var(--border-subtle);
 }
 
+.sidebar-toggle {
+  margin-left: auto;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 14px;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 6px;
+  transition: background 0.15s, color 0.15s;
+}
+
+.sidebar-toggle:hover {
+  background: var(--border-subtle);
+  color: var(--text-primary);
+}
+
+.sidebar.collapsed {
+  display: none;
+}
+
 .sidebar-icon {
   font-size: 16px;
   color: var(--accent-blue);
@@ -512,6 +533,19 @@ body {
 .kpi-value.positive { color: var(--accent-green); }
 .kpi-value.negative { color: var(--accent-red); }
 .kpi-value.zscore-val { color: var(--accent-purple); }
+
+.kpi-stat-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.kpi-stat-label {
+  font-family: var(--font-ui);
+  font-size: 10px;
+  color: var(--text-secondary);
+}
 
 .kpi-sub {
   font-family: var(--font-mono);

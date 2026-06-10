@@ -17,6 +17,7 @@
     <div class="sidebar-header">
       <span class="sidebar-icon">&#9636;</span>
       <span class="sidebar-title">ГАЙД ПО МЕТРИКАМ</span>
+      <button class="sidebar-toggle" id="sidebarToggle" title="Свернуть гайд">&#10005;</button>
     </div>
 
     <div class="sidebar-section">
@@ -172,14 +173,16 @@
       <div class="kpi-sub" id="kpiSession">&#8212;</div>
     </div>
     <div class="kpi-card kpi-stat">
-      <div class="kpi-label">MEDIAN SPREAD %</div>
-      <div class="kpi-value" id="kpiMedian">&#8212;</div>
-      <div class="kpi-sub" id="kpiMedian$">&#8212;</div>
-    </div>
-    <div class="kpi-card kpi-stat">
-      <div class="kpi-label">MIN / MAX SPREAD %</div>
-      <div class="kpi-value" id="kpiMinMax">&#8212;</div>
-      <div class="kpi-sub" id="kpiMinMax$">&#8212;</div>
+      <div class="kpi-label">SPREAD STATS</div>
+      <div class="kpi-stat-row">
+        <span class="kpi-stat-label">Median:</span>
+        <span class="kpi-value" id="kpiMedian">&#8212;</span>
+      </div>
+      <div class="kpi-stat-row">
+        <span class="kpi-stat-label">Min / Max:</span>
+        <span class="kpi-value" id="kpiMinMax">&#8212;</span>
+      </div>
+      <div class="kpi-sub" id="kpiStat$">&#8212;</div>
     </div>
   </div>
 
