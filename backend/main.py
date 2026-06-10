@@ -9,6 +9,7 @@ import concurrent.futures
 import datetime
 import json
 import logging
+import re
 import threading
 import time
 from pathlib import Path
@@ -293,7 +294,9 @@ def _telegram_bot_loop() -> None:
             for update in updates:
                 offset = max(offset, update["update_id"] + 1)
                 msg = update.get("message", {})
-                text = (msg.get("text") or "").strip().lower()
+                raw_text = (msg.get("text") or "").strip()
+                # Strip bot mention in groups: /spread@botname -> /spread
+                text = re.sub(r"@\w+$", "", raw_text.strip().lower())
                 chat_id = msg.get("chat", {}).get("id")
                 if not text or not chat_id:
                     continue
