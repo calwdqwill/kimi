@@ -236,7 +236,7 @@ function getContractTabLabel(name) {
 function renderContractTabs() {
   const el = document.getElementById('contractTabs');
   el.innerHTML = '';
-  const assetContracts = getContractsForAsset(state.activeAsset);
+  const assetContracts = getContractsForAsset(state.activeAsset).filter(c => c.is_active);
   assetContracts.forEach(c => {
     const btn = document.createElement('button');
     btn.className = 'contract-tab' + (c.id === state.activeContract ? ' active' : '');
