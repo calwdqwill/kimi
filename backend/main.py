@@ -22,7 +22,7 @@ import database
 from config import (
     BASE_DIR, TIMEFRAMES, ZSCORE_WINDOW, DEFAULT_CONTRACTS,
 )
-from clients import alor_client, hl_client
+from clients import alor_client, hl_client, telegram_client
 from domain import sync, spread, zscore, stats as stats_module
 import alor_history
 # Alor history integration active
@@ -67,6 +67,74 @@ class _TimedCache:
                     del self._data[k]
 
 _API_CACHE = _TimedCache(default_ttl_seconds=30.0)
+
+# Telegram signal state
+_telegram_state: dict[str, dict] = {}
+_selected_contract_id: str | None = None
+
+_SIGNAL_LEVELS = [0.5, 1.0, 1.5]
+_SIGNAL_COOLDOWN_MS = 5 * 60 * 1000  # 5 minutes
+
+
+def _zone(spread_pct: float) -> int:
+    """Return zone based on absolute spread percentage."""
+    abs_sp = abs(spread_pct)
+    if abs_sp < 0.5:
+        return 0
+    elif abs_sp < 1.0:
+        return 1
+    elif abs_sp < 1.5:
+        return 2
+    else:
+        return 3
+
+
+def _send_telegram_signal(contract_id: str, spread_pct: float, level: float) -> None:
+    """Format and send a Telegram signal message."""
+    emoji_map = {0.5: "🟡", 1.0: "🟢", 1.5: "🔴"}
+    name_map = {0.5: "Жёлтый", 1.0: "Зелёный", 1.5: "Красный"}
+    emoji = emoji_map.get(level, "⚪")
+    name = name_map.get(level, "Неизвестный")
+    text = f"{emoji} {contract_id.upper()} | Спред: {spread_pct:+.2f}% | Сигнал: {name}"
+    telegram_client.send_message(text)
+
+
+def _check_telegram_signal(contract_id: str, spread_pct: float) -> None:
+    """
+    Check if spread crossed a signal level and send Telegram alert if needed.
+    Antispam: max 1 signal per level per 5 minutes per contract.
+    Only signals for the currently selected contract.
+    """
+    global _telegram_state
+
+    if _selected_contract_id and contract_id != _selected_contract_id:
+        return
+
+    zone = _zone(spread_pct)
+    state = _telegram_state.get(contract_id)
+    if state is None:
+        _telegram_state[contract_id] = {"last_zone": zone, "last_fired_ms": {}}
+        return
+
+    old_zone = state["last_zone"]
+    if old_zone == zone:
+        return
+
+    # Determine which levels were crossed
+    if zone > old_zone:
+        crossed_indices = range(old_zone, zone)
+    else:
+        crossed_indices = range(zone, old_zone)
+
+    now_ms = int(time.time() * 1000)
+    for i in crossed_indices:
+        level = _SIGNAL_LEVELS[i]
+        last_fired = state["last_fired_ms"].get(level, 0)
+        if now_ms - last_fired >= _SIGNAL_COOLDOWN_MS:
+            _send_telegram_signal(contract_id, spread_pct, level)
+            state["last_fired_ms"][level] = now_ms
+
+    state["last_zone"] = zone
 
 
 @app.middleware("http")
@@ -158,6 +226,9 @@ def _poll_contract(contract: dict) -> None:
                 spread_pct=round(sp_pct, 4),
                 zscore=None,
             )
+
+            # Check Telegram signals
+            _check_telegram_signal(contract_id, sp_pct)
     except Exception as exc:
         logger.debug("Tick logging failed for %s: %s", contract_id, exc)
 
@@ -213,8 +284,16 @@ def _history_loop() -> None:
 @app.on_event("startup")
 def _startup() -> None:
     database.init_db()
-    global _poll_thread, _history_thread
+    global _poll_thread, _history_thread, _selected_contract_id
     _stop_event.clear()
+
+    # Initialize selected contract to first active one
+    contracts = database.get_contracts()
+    active = [c for c in contracts if c.get("is_active")]
+    if active:
+        _selected_contract_id = active[0]["id"]
+        logger.info("Initial selected contract: %s", _selected_contract_id)
+
     _poll_thread = threading.Thread(target=_poll_loop, daemon=True)
     _poll_thread.start()
     _history_thread = threading.Thread(target=_history_loop, daemon=True)
@@ -1231,3 +1310,36 @@ def get_funding_analytics(contract_id: str):
     }
     _API_CACHE.set(cache_key, result, ttl=300.0)
     return result
+
+
+# ---------------------------------------------------------------------------
+# API endpoints — Telegram
+# ---------------------------------------------------------------------------
+@app.get("/api/test-telegram")
+def test_telegram(chat_id: str | None = None):
+    """Send a test message to verify Telegram bot configuration."""
+    text = "🧪 Тестовое сообщение от mo-ex.online | Бот работает корректно."
+    ok = telegram_client.send_message(text, chat_id=chat_id)
+    if ok:
+        return {"status": "ok", "message": "Test message sent"}
+    return {"status": "error", "message": "Failed to send test message. Check logs for details."}
+
+
+@app.get("/api/selected-contract")
+def get_selected_contract():
+    """Return the currently selected contract for Telegram signals."""
+    return {"selected_contract_id": _selected_contract_id}
+
+
+@app.post("/api/selected-contract")
+def set_selected_contract(contract_id: str):
+    """Set the contract that should receive Telegram signals."""
+    global _selected_contract_id
+    contract = database.get_contract(contract_id)
+    if not contract:
+        raise HTTPException(status_code=404, detail="Contract not found")
+    if not contract.get("is_active"):
+        raise HTTPException(status_code=400, detail="Contract is not active")
+    _selected_contract_id = contract_id
+    logger.info("Selected contract changed to: %s", contract_id)
+    return {"status": "ok", "selected_contract_id": contract_id}

@@ -44,6 +44,9 @@ FINAM_CLIENT_ID: str = os.getenv("FINAM_CLIENT_ID", "").strip()
 ALOR_REFRESH_TOKEN: str = os.getenv("ALOR_REFRESH_TOKEN", "").strip()
 ALOR_EXCHANGE: str = os.getenv("ALOR_EXCHANGE", "MOEX").strip()
 
+TELEGRAM_BOT_TOKEN: str = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
+TELEGRAM_CHAT_ID: str = os.getenv("TELEGRAM_CHAT_ID", "").strip()
+
 # Diagnostic logging
 if FINAM_TOKEN:
     logger.info("FINAM_TOKEN loaded: %s...%s (len=%d)", FINAM_TOKEN[:20], FINAM_TOKEN[-20:], len(FINAM_TOKEN))
@@ -146,6 +149,16 @@ DEFAULT_CONTRACTS = [
         "hl_coin": "xyz:BRENTOIL",
         "is_active": True,
         "contract_month": 7,
+        "contract_year": 2026,
+    },
+    {
+        "id": "brq6",
+        "name": "BRQ6",
+        "asset": "brent",
+        "moex_symbol": "BRQ6@RTSX",
+        "hl_coin": "xyz:BRENTOIL",
+        "is_active": True,
+        "contract_month": 8,
         "contract_year": 2026,
     },
     # Gold — quarterly
