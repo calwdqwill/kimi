@@ -7,7 +7,7 @@
 <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/static/style.css?v=9">
+<link rel="stylesheet" href="/static/style.css?v=10">
 </head>
 <body>
 <div id="app" class="app">
@@ -174,14 +174,8 @@
     </div>
     <div class="kpi-card kpi-stat">
       <div class="kpi-label">SPREAD STATS</div>
-      <div class="kpi-stat-row">
-        <span class="kpi-stat-label">Median:</span>
-        <span class="kpi-value" id="kpiMedian">&#8212;</span>
-      </div>
-      <div class="kpi-stat-row">
-        <span class="kpi-stat-label">Min / Max:</span>
-        <span class="kpi-value" id="kpiMinMax">&#8212;</span>
-      </div>
+      <div class="kpi-value" id="kpiMedian">&#8212;</div>
+      <div class="kpi-value compact" id="kpiMinMax">&#8212;</div>
       <div class="kpi-sub" id="kpiStat$">&#8212;</div>
     </div>
   </div>
@@ -611,6 +605,6 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-<script src="/static/app.js?v=multiasset12"></script>
+<script src="/static/app.js?v=multiasset13"></script>
 </body>
 </html>

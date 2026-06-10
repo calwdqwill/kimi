@@ -535,6 +535,7 @@ body {
 .kpi-value.positive { color: var(--accent-green); }
 .kpi-value.negative { color: var(--accent-red); }
 .kpi-value.zscore-val { color: var(--accent-purple); }
+.kpi-value.compact { font-size: 13px; font-weight: 400; }
 
 .kpi-stat-row {
   display: flex;
