@@ -1,0 +1,22 @@
+# MO-EX Dashboard dependencies
+# Generated from codebase audit
+
+# Web framework & server
+fastapi>=0.110.0
+uvicorn[standard]>=0.27.0
+starlette>=0.36.0
+
+# Data validation
+pydantic>=2.6.0
+
+# HTTP client
+httpx>=0.26.0
+
+# Environment variables
+python-dotenv>=1.0.0
+
+# PostgreSQL driver (for Docker deployment)
+psycopg2-binary>=2.9.0
+
+# No additional packages needed — sqlite3, statistics, pathlib, datetime,
+# json, logging, threading, concurrent.futures are part of Python stdlib.

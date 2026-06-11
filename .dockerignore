@@ -1,0 +1,44 @@
+# Git
+.git/
+.gitignore
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.venv/
+venv/
+env/
+
+# Secrets
+.env
+backend/.env
+*.pem
+*.key
+
+# Data & logs
+data/
+*.db
+*.log
+*.dump
+
+# Build artifacts
+deploy.tar.gz
+
+# IDE
+.vscode/
+.idea/
+
+# Ad-hoc operational scripts (not part of runtime image)
+check_*.py
+fix_*.py
+merge_*.py
+reload_*.py
+deploy_remote*.py
+deploy_to_correct_dir.py
+deploy_telegram.py
+deploy_funding.py
+upload_main.py
+patch_main.py
+test.py

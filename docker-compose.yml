@@ -1,0 +1,68 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: moex-db
+    restart: unless-stopped
+    env_file: backend/.env
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-moex}
+      POSTGRES_USER: ${POSTGRES_USER:-moex}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-moex}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - moex
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: moex-backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file: backend/.env
+    environment:
+      POSTGRES_HOST: db
+      POSTGRES_DB: ${POSTGRES_DB:-moex}
+      POSTGRES_USER: ${POSTGRES_USER:-moex}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-moex}
+      POSTGRES_PORT: 5432
+    ports:
+      - "127.0.0.1:8001:8001"
+    networks:
+      - moex
+    volumes:
+      - ./data:/app/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/api/health')"]
+      interval: 30s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: moex-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "127.0.0.1:8080:80"
+    networks:
+      - moex
+
+volumes:
+  pgdata:
+
+networks:
+  moex:
+    driver: bridge

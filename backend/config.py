@@ -212,3 +212,19 @@ ZSCORE_WINDOW: int = 50            # number of candles
 # ---------------------------------------------------------------------------
 BASE_DIR: Path = Path(__file__).resolve().parent.parent
 DB_PATH: Path = BASE_DIR / "data" / "dashboard.db"
+
+# ---------------------------------------------------------------------------
+# PostgreSQL connection (Docker deployment)
+# If DATABASE_URL is set, backend uses PostgreSQL instead of SQLite.
+# Example: postgresql://moex:moex@db:5432/moex
+# ---------------------------------------------------------------------------
+DATABASE_URL: str = os.getenv("DATABASE_URL", "").strip()
+
+if not DATABASE_URL and os.getenv("POSTGRES_HOST"):
+    _pg_user = os.getenv("POSTGRES_USER", "moex")
+    _pg_pass = os.getenv("POSTGRES_PASSWORD", "moex")
+    _pg_host = os.getenv("POSTGRES_HOST", "db")
+    _pg_port = os.getenv("POSTGRES_PORT", "5432")
+    _pg_db = os.getenv("POSTGRES_DB", "moex")
+    DATABASE_URL = f"postgresql://{_pg_user}:{_pg_pass}@{_pg_host}:{_pg_port}/{_pg_db}"
+    logger.info("DATABASE_URL built from POSTGRES_* variables: postgresql://%s:***@%s:%s/%s", _pg_user, _pg_host, _pg_port, _pg_db)

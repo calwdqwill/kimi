@@ -1,5 +1,23 @@
 # Changelog
 
+## 2026-06-11 — Docker + PostgreSQL V4.0
+
+### Infrastructure
+- **Docker-контейнеризация**: backend, frontend/nginx, PostgreSQL — 3 сервиса в `docker-compose.yml`
+  - `Dockerfile` — Python 3.12 + FastAPI/uvicorn на порту `8001`
+  - `frontend/Dockerfile` + `frontend/nginx.conf` — статический nginx
+  - `docker-compose.yml` — `db`, `backend`, `frontend` с healthcheck и volume `pgdata`
+- **PostgreSQL миграция**: `backend/database.py` теперь поддерживает SQLite (legacy) и PostgreSQL (Docker)
+  - `psycopg2-binary` добавлен в `requirements.txt`
+  - `backend/config.py` умеет собирать `DATABASE_URL` из `POSTGRES_*` переменных
+  - `backend/backup.py` поддерживает `pg_dump` для Postgres и копирование файла для SQLite
+- **Миграция данных**: `scripts/migrate_sqlite_to_postgres.py` переносит существующую SQLite-БД в PostgreSQL
+- **Deploy**:
+  - `deploy/nginx/mo-ex` теперь проксирует `/api/` на `127.0.0.1:8001`
+  - `deploy/systemd/mo-ex-docker.service` — systemd unit для `docker compose up -d`
+
+---
+
 ## 2026-06-10 — Telegram Signals V3.8 + UI Cleanup V3.9
 
 ### Telegram Bot Integration
