@@ -510,7 +510,7 @@ body {
 .kpi-zscore::before { background: linear-gradient(90deg, var(--accent-purple), transparent); }
 .kpi-spread::before { background: linear-gradient(90deg, var(--accent-red), transparent); }
 .kpi-arb::before { background: linear-gradient(90deg, var(--accent-orange), transparent); }
-.kpi-ticks::before { background: linear-gradient(90deg, var(--accent-green), transparent); }
+.kpi-rapira::before { background: linear-gradient(90deg, #f59e0b, transparent); }
 .kpi-stat::before { background: linear-gradient(90deg, rgba(255,255,255,0.15), transparent); }
 .kpi-entry::before { background: linear-gradient(90deg, var(--accent-red), transparent); }
 
@@ -827,11 +827,16 @@ body {
   border-bottom-color: var(--accent-blue);
 }
 
-.tick-count {
+.tick-meta {
   margin-left: auto;
   font-family: var(--font-mono);
   font-size: 10px;
   color: var(--text-muted);
+}
+
+.tick-table-wrap {
+  max-height: 420px;
+  overflow-y: auto;
 }
 
 table {

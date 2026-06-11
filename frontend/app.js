@@ -17,6 +17,7 @@ const state = {
   cache: {},
   tickCount: 0,
   sessionStart: null,
+  rapira: null,
   // Range slider state (per contract)
   rangeState: {},       // key = contractId, value = { rangeStart, rangeEnd }
   isDragging: null,
@@ -742,15 +743,13 @@ function updateKPIs() {
   document.getElementById('kpiArb').textContent = d.arb_spread !== null ? fmtN(d.arb_spread, 3) : '-';
   document.getElementById('kpiArbDir').textContent = d.arb_direction || '-';
 
-  // Ticks
-  state.tickCount++;
-  document.getElementById('kpiTicks').textContent = state.tickCount;
-  if (!state.sessionStart) state.sessionStart = Date.now();
-  const elapsed = Math.floor((Date.now() - state.sessionStart) / 1000);
-  const h = Math.floor(elapsed / 3600).toString().padStart(2, '0');
-  const m = Math.floor((elapsed % 3600) / 60).toString().padStart(2, '0');
-  const s = (elapsed % 60).toString().padStart(2, '0');
-  document.getElementById('kpiSession').textContent = `session ${h}:${m}:${s}`;
+  // Rapira
+  const rapira = state.rapira;
+  if (rapira) {
+    document.getElementById('kpiRapiraMid').textContent = rapira.mid ? rapira.mid.toFixed(2) + ' ₽' : '—';
+    document.getElementById('kpiRapiraBid').textContent = rapira.best_bid ? 'bid ' + rapira.best_bid.toFixed(2) : 'bid —';
+    document.getElementById('kpiRapiraAsk').textContent = rapira.best_ask ? 'ask ' + rapira.best_ask.toFixed(2) : 'ask —';
+  }
 }
 
 function updateStats() {
@@ -814,17 +813,37 @@ function updateTable() {
   const cache = getCurrentCache();
   const ticks = cache ? cache.ticks : [];
   const tbody = document.getElementById('tickTableBody');
-  document.getElementById('tickCount').textContent = (ticks.length || 0) + ' records';
+
+  // Session timer for tick meta
+  if (!state.sessionStart) state.sessionStart = Date.now();
+  const elapsed = Math.floor((Date.now() - state.sessionStart) / 1000);
+  const h = Math.floor(elapsed / 3600).toString().padStart(2, '0');
+  const m = Math.floor((elapsed % 3600) / 60).toString().padStart(2, '0');
+  const s = (elapsed % 60).toString().padStart(2, '0');
+
+  state.tickCount = ticks.length || 0;
+  document.getElementById('tickCount').textContent = state.tickCount + ' тиков собрано';
+  document.getElementById('tickSession').textContent = `session ${h}:${m}:${s}`;
 
   if (!ticks.length) {
     tbody.innerHTML = '<tr><td colspan="6" class="loading">No data</td></tr>';
     return;
   }
 
-  tbody.innerHTML = ticks.slice(0, 20).map(t => {
+  // Group ticks into 5-minute buckets, keep the last tick in each bucket
+  const bucketMs = 5 * 60 * 1000;
+  const buckets = new Map();
+  for (const t of ticks) {
+    const bucket = Math.floor(t.timestamp_ms / bucketMs) * bucketMs;
+    buckets.set(bucket, t);
+  }
+  const grouped = Array.from(buckets.values()).sort((a, b) => b.timestamp_ms - a.timestamp_ms);
+  const display = grouped.slice(0, 120);
+
+  tbody.innerHTML = display.map(t => {
     const zClass = t.zscore === null ? '' : Math.abs(t.zscore) >= 2 ? 'style="color:#ef4444;font-weight:600;"' : Math.abs(t.zscore) >= 1.5 ? 'style="color:#f59e0b;"' : '';
     return `<tr>
-      <td>${fmtTs(t.timestamp_ms)}</td>
+      <td>${fmtDate(t.timestamp_ms)}</td>
       <td>${fmtN(t.moex_mid, 2)}</td>
       <td>${fmtN(t.hl_mid, 2)}</td>
       <td class="${t.spread < 0 ? 'negative' : ''}">${fmtN(t.spread, 3)}</td>
@@ -844,14 +863,15 @@ async function refreshAll() {
 
   try {
     // Fetch in parallel - use allSettled so one slow endpoint doesn't block everything
-    const [histR, pricesR, curR, zscR, statR, sigR, ticksR] = await Promise.allSettled([
+    const [histR, pricesR, curR, zscR, statR, sigR, ticksR, rapiraR] = await Promise.allSettled([
       api(`/api/historical/${cid}/${tf}`),
       api(`/api/prices/${cid}/${tf}`),
       api(`/api/current/${cid}`),
       api(`/api/zscore/${cid}/${tf}`),
       api(`/api/stats/${cid}/${tf}`),
       api(`/api/signal/${cid}`),
-      api(`/api/ticks/${cid}?limit=50`),
+      api(`/api/ticks/${cid}?limit=120`),
+      api(`/api/rapira/usdt-rub`),
     ]);
 
     // Build cache object for this contract+tf
@@ -865,6 +885,7 @@ async function refreshAll() {
     if (statR.status === 'fulfilled') newCache.stats = statR.value;
     if (sigR.status === 'fulfilled') newCache.signalData = sigR.value;
     if (ticksR.status === 'fulfilled') newCache.ticks = ticksR.value;
+    if (rapiraR.status === 'fulfilled') state.rapira = rapiraR.value;
 
     setCache(cid, tf, newCache);
 
@@ -886,7 +907,7 @@ async function refreshAll() {
     }
 
     // Track connection health
-    const failures = [histR, pricesR, curR, zscR, statR, sigR, ticksR].filter(r => r.status === 'rejected').length;
+    const failures = [histR, pricesR, curR, zscR, statR, sigR, ticksR, rapiraR].filter(r => r.status === 'rejected').length;
     if (failures === 7) {
       state.consecutiveFails++;
     } else {
@@ -897,7 +918,7 @@ async function refreshAll() {
     if (wasOnline !== state.isOnline) updateConnectionStatus();
 
     // Log any rejections for debugging
-    [histR, pricesR, curR, zscR, statR, sigR, ticksR].forEach((r, i) => {
+    [histR, pricesR, curR, zscR, statR, sigR, ticksR, rapiraR].forEach((r, i) => {
       if (r.status === 'rejected') console.error('Refresh partial fail:', i, r.reason);
     });
   } catch (e) {
@@ -1060,7 +1081,7 @@ async function init() {
       const h = Math.floor(elapsed / 3600).toString().padStart(2, '0');
       const m = Math.floor((elapsed % 3600) / 60).toString().padStart(2, '0');
       const s = (elapsed % 60).toString().padStart(2, '0');
-      const el = document.getElementById('kpiSession');
+      const el = document.getElementById('tickSession');
       if (el) el.textContent = `session ${h}:${m}:${s}`;
     }
   }, 1000);
