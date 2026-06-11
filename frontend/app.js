@@ -542,6 +542,7 @@ function initRangeSlider() {
 
 function initSidebarToggle() {
   const btn = document.getElementById('sidebarToggle');
+  const openBtn = document.getElementById('guideOpenBtn');
   const sidebar = document.querySelector('.sidebar');
   if (!btn || !sidebar) return;
 
@@ -550,9 +551,20 @@ function initSidebarToggle() {
   if (collapsed) sidebar.classList.add('collapsed');
 
   btn.addEventListener('click', () => {
-    sidebar.classList.toggle('collapsed');
-    localStorage.setItem('sidebarCollapsed', sidebar.classList.contains('collapsed'));
+    sidebar.classList.add('collapsed');
+    localStorage.setItem('sidebarCollapsed', 'true');
+    if (openBtn) openBtn.style.display = '';
   });
+
+  if (openBtn) {
+    openBtn.addEventListener('click', () => {
+      sidebar.classList.remove('collapsed');
+      localStorage.setItem('sidebarCollapsed', 'false');
+      openBtn.style.display = 'none';
+    });
+    // Sync visibility on load
+    if (!collapsed) openBtn.style.display = 'none';
+  }
 }
 
 // =============================================================================
@@ -870,7 +882,7 @@ async function refreshAll() {
       api(`/api/zscore/${cid}/${tf}`),
       api(`/api/stats/${cid}/${tf}`),
       api(`/api/signal/${cid}`),
-      api(`/api/ticks/${cid}?limit=120`),
+      api(`/api/ticks/${cid}?limit=10000`),
       api(`/api/rapira/usdt-rub`),
     ]);
 

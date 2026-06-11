@@ -99,6 +99,15 @@
 - **Сложность:** Средняя
 - **Статус:** Готово — `database.py` поддерживает оба движка, мигратор написан
 
+### 15. HTTPS origin для `mo-ex.online` (убрать Flexible)
+- **Суть:** Сейчас Cloudflare для `mo-ex.online` работает в режиме **Flexible** (HTTP между Cloudflare и сервером). Нужно добавить SSL-сертификат на origin-сервер и переключить на **Full (Strict)**
+- **Варианты:**
+  1. Cloudflare Origin CA (самый простой — генерируется в dashboard)
+  2. Let's Encrypt через DNS-challenge (Certbot + Cloudflare plugin)
+- **Важно:** Не затронуть `deltagrid.pro` (он остаётся на Full Strict со своим Let's Encrypt)
+- **Сложность:** Низкая
+- **Статус:** 🔄 Заблокировано — `mo-ex.online` работает на Flexible, deltagrid.pro на Full Strict
+
 ---
 
-*Последнее обновление: 2026-06-10*
+*Последнее обновление: 2026-06-11*

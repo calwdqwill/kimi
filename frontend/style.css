@@ -468,6 +468,25 @@ body {
   to { transform: rotate(360deg); }
 }
 
+.guide-open-btn {
+  margin-left: 8px;
+  padding: 5px 12px;
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--accent-blue);
+  background: transparent;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.guide-open-btn:hover {
+  background: rgba(59, 130, 246, 0.1);
+  border-color: var(--accent-blue);
+}
+
 /* ====== KPI GRID ====== */
 .kpi-grid {
   display: grid;

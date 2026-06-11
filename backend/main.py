@@ -403,11 +403,12 @@ def _startup() -> None:
     global _poll_thread, _history_thread, _telegram_bot_thread, _selected_contract_id
     _stop_event.clear()
 
-    # Initialize selected contract to first active one
+    # Initialize selected contract — prefer BRQ6 (August Brent) if active
     contracts = database.get_contracts()
     active = [c for c in contracts if c.get("is_active")]
     if active:
-        _selected_contract_id = active[0]["id"]
+        brq = next((c for c in active if c["id"] == "brq6"), None)
+        _selected_contract_id = brq["id"] if brq else active[0]["id"]
         logger.info("Initial selected contract: %s", _selected_contract_id)
 
     _poll_thread = threading.Thread(target=_poll_loop, daemon=True)
