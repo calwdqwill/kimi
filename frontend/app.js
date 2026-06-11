@@ -24,6 +24,14 @@ const state = {
   pollInterval: null,
   isOnline: true,
   consecutiveFails: 0,
+  // WebSocket state
+  ws: null,
+  wsUrl: null,
+  wsReconnectAttempts: 0,
+  wsMaxReconnectAttempts: 10,
+  wsReconnectDelay: 2000,
+  wsFallbackPolling: false,
+  wsLastPong: 0,
 };
 
 // Cache helpers
@@ -109,6 +117,171 @@ async function api(path, retries = 2) {
   }
 }
 
+// =============================================================================
+// WEBSOCKET
+// =============================================================================
+function getWsUrl() {
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  return `${protocol}//${window.location.host}/api/ws`;
+}
+
+function connectWebSocket() {
+  if (state.ws) {
+    try { state.ws.close(); } catch (e) {}
+  }
+
+  const url = getWsUrl();
+  console.log('[WS] Connecting to', url);
+  const ws = new WebSocket(url);
+  state.ws = ws;
+  state.wsUrl = url;
+
+  const connectionTimeout = setTimeout(() => {
+    console.warn('[WS] Connection timeout, forcing fallback polling');
+    ws.close();
+    enableFallbackPolling();
+  }, 5000);
+
+  ws.onopen = () => {
+    console.log('[WS] Connected');
+    clearTimeout(connectionTimeout);
+    state.wsReconnectAttempts = 0;
+    state.wsFallbackPolling = false;
+    disableFallbackPolling();
+    setOnline(true);
+    sendWsSubscribe();
+  };
+
+  ws.onmessage = (event) => {
+    try {
+      const msg = JSON.parse(event.data);
+      handleWsMessage(msg);
+    } catch (e) {
+      console.error('[WS] Message parse error:', e);
+    }
+  };
+
+  ws.onerror = (err) => {
+    console.error('[WS] Error:', err);
+  };
+
+  ws.onclose = (event) => {
+    clearTimeout(connectionTimeout);
+    console.log('[WS] Closed', event.code, event.reason);
+    state.ws = null;
+    setOnline(false);
+    enableFallbackPolling();
+    scheduleWsReconnect();
+  };
+}
+
+function scheduleWsReconnect() {
+  if (state.wsReconnectAttempts >= state.wsMaxReconnectAttempts) {
+    console.warn('[WS] Max reconnect attempts reached, staying on fallback polling');
+    return;
+  }
+  state.wsReconnectAttempts++;
+  const delay = Math.min(state.wsReconnectDelay * state.wsReconnectAttempts, 30000);
+  console.log(`[WS] Reconnecting in ${delay}ms (attempt ${state.wsReconnectAttempts})`);
+  setTimeout(() => {
+    if (!state.ws) connectWebSocket();
+  }, delay);
+}
+
+function sendWsSubscribe() {
+  if (!state.ws || state.ws.readyState !== WebSocket.OPEN) return;
+  if (!state.activeContract || !state.activeTf) return;
+  state.ws.send(JSON.stringify({
+    action: 'subscribe',
+    contract_id: state.activeContract,
+    timeframe: state.activeTf,
+  }));
+}
+
+function handleWsMessage(msg) {
+  if (!msg || !msg.type) return;
+
+  const cid = state.activeContract;
+  const tf = state.activeTf;
+  if (!cid || !tf) return;
+
+  if (msg.type === 'current') {
+    const cache = getCache(cid, tf) || {};
+    cache.currentData = msg.data;
+    setCache(cid, tf, cache);
+    if (state.activeContract === cid && state.activeTf === tf) {
+      updateKPIs();
+      updatePaperPositionCard();
+      paperCheckSignals();
+    }
+  } else if (msg.type === 'signal') {
+    const cache = getCache(cid, tf) || {};
+    cache.signalData = msg.data;
+    setCache(cid, tf, cache);
+    if (state.activeContract === cid && state.activeTf === tf) {
+      updateSignal();
+      updateStats();
+    }
+  } else if (msg.type === 'rapira') {
+    state.rapira = msg.data;
+    if (state.activeContract === cid && state.activeTf === tf) {
+      updateKPIs();
+    }
+  } else if (msg.type === 'ticks') {
+    const cache = getCache(cid, tf) || {};
+    cache.ticks = msg.data;
+    setCache(cid, tf, cache);
+    if (state.activeContract === cid && state.activeTf === tf) {
+      updateTable();
+    }
+  } else if (msg.type === 'ohlc') {
+    const cache = getCache(cid, tf) || {};
+    const d = msg.data || {};
+    if (d.historical) cache.historicalData = d.historical;
+    if (d.prices) cache.pricesData = d.prices;
+    if (d.zscore) cache.zscoreData = d.zscore;
+    if (d.stats) cache.stats = d.stats;
+    setCache(cid, tf, cache);
+    if (state.activeContract === cid && state.activeTf === tf) {
+      updateChart();
+      updateSliderUI();
+      updateStats();
+      updateSignal();
+    }
+  } else if (msg.type === 'subscribed') {
+    console.log('[WS] Subscribed to', msg.contract_id, msg.timeframe);
+    refreshAllSilent();
+  } else if (msg.type === 'pong') {
+    state.wsLastPong = Date.now();
+  } else if (msg.type === 'error') {
+    console.error('[WS] Server error:', msg.message);
+  }
+}
+
+function enableFallbackPolling() {
+  if (state.wsFallbackPolling) return;
+  state.wsFallbackPolling = true;
+  console.log('[WS] Enabling HTTP fallback polling');
+  if (state.pollInterval) clearInterval(state.pollInterval);
+  state.pollInterval = setInterval(async () => {
+    try { await refreshAll(); }
+    catch (e) { /* silent fail */ }
+  }, 5000);
+}
+
+function disableFallbackPolling() {
+  if (!state.wsFallbackPolling) return;
+  state.wsFallbackPolling = false;
+  console.log('[WS] Disabling HTTP fallback polling');
+  if (state.pollInterval) clearInterval(state.pollInterval);
+  state.pollInterval = null;
+}
+
+async function refreshAllSilent() {
+  try { await refreshAll(); }
+  catch (e) { /* silent fail */ }
+}
+
 async function loadAssets() {
   state.assets = await api('/api/assets');
 }
@@ -177,6 +350,9 @@ function setActiveContract(id) {
     updateSliderUI();
     updateTable();
   }
+
+  // Re-subscribe via WebSocket for the new contract
+  sendWsSubscribe();
 
   // Load paper trading data for this contract
   loadPaperData(id).then(() => {
@@ -281,6 +457,7 @@ document.querySelectorAll('.tf-btn').forEach(btn => {
     document.querySelectorAll('.tf-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     state.activeTf = btn.dataset.tf;
+    sendWsSubscribe();
     refreshAll();
   });
 });
@@ -942,6 +1119,12 @@ async function refreshAll() {
   }
 }
 
+function setOnline(online) {
+  const wasOnline = state.isOnline;
+  state.isOnline = online;
+  if (wasOnline !== online) updateConnectionStatus();
+}
+
 function updateConnectionStatus() {
   const dot = document.querySelector('.live-dot');
   const text = document.querySelector('.live-text');
@@ -1071,20 +1254,17 @@ async function init() {
     await loadPaperSettings();
     await refreshAll();
     initRangeSlider();
-  initSidebarToggle();
-  initPaperEquityChart();
+    initSidebarToggle();
+    initPaperEquityChart();
     if (state.activeContract) await loadPaperData(state.activeContract);
     updatePaperPositionCard();
+
+    // Start WebSocket after initial HTTP load
+    connectWebSocket();
   } catch (e) {
     console.log('Backend not available, using demo data');
     useDemoData();
   }
-
-  // Start polling every 5 seconds (will keep trying API)
-  state.pollInterval = setInterval(async () => {
-    try { await refreshAll(); }
-    catch (e) { /* silent fail, keep showing last data */ }
-  }, 5000);
 
   // Session timer
   setInterval(() => {
@@ -1097,6 +1277,14 @@ async function init() {
       if (el) el.textContent = `session ${h}:${m}:${s}`;
     }
   }, 1000);
+
+  // Paper equity recording (no longer tied to HTTP polling)
+  setInterval(() => {
+    if (state.activeContract && Date.now() - paperState.lastEquityUpdate > 60000) {
+      paperState.lastEquityUpdate = Date.now();
+      paperRecordEquity();
+    }
+  }, 60000);
 }
 
 function useDemoData() {

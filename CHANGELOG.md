@@ -18,6 +18,31 @@
 
 ---
 
+## 2026-06-12 — WebSocket Real-Time V4.1
+
+### Backend
+- **`backend/main.py`** — добавлен WebSocket endpoint `GET /api/ws`:
+  - Подписка клиента на `contract_id` + `timeframe` через сообщение `{"action":"subscribe",...}`
+  - Фоновый broadcast loop пушит:
+    - `current` — цены/спред каждые 2 сек
+    - `signal` — сигнал каждые 10 сек
+    - `rapira` — USDT/RUB каждые 10 сек
+    - `ticks` — тики каждые 5 сек
+    - `ohlc` — исторические данные, prices, zscore, stats каждые 30 сек
+  - Все тяжёлые DB-вызовы обернуты в `asyncio.to_thread()` для неблокирующей работы event loop
+
+### Frontend
+- **`frontend/app.js`** — заменён 5-секундный HTTP polling на WebSocket:
+  - `connectWebSocket()` / `sendWsSubscribe()` / `handleWsMessage()`
+  - UI обновляется из WebSocket сообщений той же логикой, что и при HTTP polling
+  - Fallback: при обрыве соединения автоматически включается HTTP polling каждые 5 сек, при восстановлении — отключается
+  - Paper equity recording вынесен в отдельный 60-секундный interval (ранее зависел от polling)
+
+### Deploy
+- Nginx `/api/` уже проксирует WebSocket Upgrade headers — изменений не требуется
+
+---
+
 ## 2026-06-10 — Telegram Signals V3.8 + UI Cleanup V3.9
 
 ### Telegram Bot Integration

@@ -5,6 +5,7 @@ Run from the backend folder:
     uvicorn main:app --reload --port 8000
 """
 
+import asyncio
 import concurrent.futures
 import datetime
 import json
@@ -14,7 +15,7 @@ import threading
 import time
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Body
+from fastapi import FastAPI, HTTPException, Body, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from starlette.responses import FileResponse
@@ -77,6 +78,17 @@ _selected_contract_id: str | None = None
 _rapira_cache: dict | None = None
 _rapira_cache_ts: float = 0.0
 _RAPIRA_TTL = 10.0  # seconds
+
+# WebSocket state
+_WS_CONNECTIONS: dict[WebSocket, dict] = {}
+_WS_LOCK = asyncio.Lock()
+_WS_BROADCAST_INTERVALS = {
+    "current": 2.0,
+    "signal": 10.0,
+    "rapira": 10.0,
+    "ticks": 5.0,
+    "ohlc": 30.0,
+}
 
 _SIGNAL_LEVELS = [0.5, 1.0, 1.5]
 _SIGNAL_COOLDOWN_MS = 5 * 60 * 1000  # 5 minutes
@@ -428,6 +440,160 @@ def _shutdown() -> None:
         _history_thread.join(timeout=5.0)
     if _telegram_bot_thread is not None:
         _telegram_bot_thread.join(timeout=3.0)
+
+
+# ---------------------------------------------------------------------------
+# WebSocket manager
+# ---------------------------------------------------------------------------
+async def _ws_safe_send(websocket: WebSocket, message: dict) -> None:
+    """Send a JSON message, ignoring closed connections."""
+    try:
+        await websocket.send_json(message)
+    except Exception:
+        # Connection likely closed; will be cleaned up on disconnect.
+        pass
+
+
+async def _ws_send_current(websocket: WebSocket, contract_id: str) -> None:
+    payload = await asyncio.to_thread(get_current, contract_id)
+    await _ws_safe_send(websocket, {"type": "current", "data": payload})
+
+
+async def _ws_send_signal(websocket: WebSocket, contract_id: str) -> None:
+    payload = await asyncio.to_thread(get_signal, contract_id)
+    await _ws_safe_send(websocket, {"type": "signal", "data": payload})
+
+
+async def _ws_send_rapira(websocket: WebSocket) -> None:
+    payload = await asyncio.to_thread(get_rapira_usdt_rub)
+    await _ws_safe_send(websocket, {"type": "rapira", "data": payload})
+
+
+async def _ws_send_ticks(websocket: WebSocket, contract_id: str) -> None:
+    payload = await asyncio.to_thread(get_ticks, contract_id, 10000)
+    await _ws_safe_send(websocket, {"type": "ticks", "data": payload})
+
+
+async def _ws_send_ohlc(websocket: WebSocket, contract_id: str, timeframe: str) -> None:
+    hist, prices, zsc, stats = await asyncio.gather(
+        asyncio.to_thread(get_historical, contract_id, timeframe),
+        asyncio.to_thread(get_prices, contract_id, timeframe),
+        asyncio.to_thread(get_zscore, contract_id, timeframe),
+        asyncio.to_thread(get_stats, contract_id, timeframe),
+    )
+    await _ws_safe_send(
+        websocket,
+        {
+            "type": "ohlc",
+            "data": {
+                "historical": hist,
+                "prices": prices,
+                "zscore": zsc,
+                "stats": stats,
+            },
+        },
+    )
+
+
+async def _ws_broadcast_loop() -> None:
+    """Periodically push data to active WebSocket subscribers."""
+    while True:
+        try:
+            loop_start = time.time()
+            async with _WS_LOCK:
+                connections = list(_WS_CONNECTIONS.items())
+
+            for websocket, sub in connections:
+                if not sub:
+                    continue
+                contract_id = sub.get("contract_id")
+                timeframe = sub.get("timeframe")
+                if not contract_id or not timeframe:
+                    continue
+
+                last_sent = sub.setdefault("last_sent", {})
+
+                try:
+                    if loop_start - last_sent.get("current", 0) >= _WS_BROADCAST_INTERVALS["current"]:
+                        await _ws_send_current(websocket, contract_id)
+                        last_sent["current"] = loop_start
+
+                    if loop_start - last_sent.get("signal", 0) >= _WS_BROADCAST_INTERVALS["signal"]:
+                        await _ws_send_signal(websocket, contract_id)
+                        last_sent["signal"] = loop_start
+
+                    if loop_start - last_sent.get("rapira", 0) >= _WS_BROADCAST_INTERVALS["rapira"]:
+                        await _ws_send_rapira(websocket)
+                        last_sent["rapira"] = loop_start
+
+                    if loop_start - last_sent.get("ticks", 0) >= _WS_BROADCAST_INTERVALS["ticks"]:
+                        await _ws_send_ticks(websocket, contract_id)
+                        last_sent["ticks"] = loop_start
+
+                    if loop_start - last_sent.get("ohlc", 0) >= _WS_BROADCAST_INTERVALS["ohlc"]:
+                        await _ws_send_ohlc(websocket, contract_id, timeframe)
+                        last_sent["ohlc"] = loop_start
+                except Exception as exc:
+                    logger.warning("WebSocket send failed for %s: %s", contract_id, exc)
+
+            elapsed = time.time() - loop_start
+            await asyncio.sleep(max(0.2, 2.0 - elapsed))
+        except Exception as exc:
+            logger.exception("WebSocket broadcast loop error: %s", exc)
+            await asyncio.sleep(2.0)
+
+
+@app.websocket("/api/ws")
+async def websocket_endpoint(websocket: WebSocket):
+    await websocket.accept()
+    async with _WS_LOCK:
+        _WS_CONNECTIONS[websocket] = {}
+    try:
+        while True:
+            message = await websocket.receive_json()
+            action = message.get("action")
+            if action == "subscribe":
+                contract_id = message.get("contract_id")
+                timeframe = message.get("timeframe")
+                if contract_id and timeframe and timeframe in TIMEFRAMES:
+                    async with _WS_LOCK:
+                        _WS_CONNECTIONS[websocket] = {
+                            "contract_id": contract_id,
+                            "timeframe": timeframe,
+                            "last_sent": {},
+                        }
+                    await _ws_safe_send(
+                        websocket,
+                        {
+                            "type": "subscribed",
+                            "contract_id": contract_id,
+                            "timeframe": timeframe,
+                        },
+                    )
+                else:
+                    await _ws_safe_send(
+                        websocket,
+                        {"type": "error", "message": "Invalid contract_id or timeframe"},
+                    )
+            elif action == "ping":
+                await _ws_safe_send(websocket, {"type": "pong"})
+            else:
+                await _ws_safe_send(
+                    websocket,
+                    {"type": "error", "message": f"Unknown action: {action}"},
+                )
+    except WebSocketDisconnect:
+        logger.info("WebSocket disconnected")
+    except Exception as exc:
+        logger.warning("WebSocket error: %s", exc)
+    finally:
+        async with _WS_LOCK:
+            _WS_CONNECTIONS.pop(websocket, None)
+
+
+@app.on_event("startup")
+async def _startup_ws() -> None:
+    asyncio.create_task(_ws_broadcast_loop())
 
 
 # ---------------------------------------------------------------------------
