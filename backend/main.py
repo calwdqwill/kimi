@@ -23,7 +23,7 @@ import database
 from config import (
     BASE_DIR, TIMEFRAMES, ZSCORE_WINDOW, DEFAULT_CONTRACTS,
 )
-from clients import alor_client, hl_client, telegram_client
+from clients import alor_client, hl_client, telegram_client, rapira_client
 from domain import sync, spread, zscore, stats as stats_module
 import alor_history
 # Alor history integration active
@@ -72,6 +72,11 @@ _API_CACHE = _TimedCache(default_ttl_seconds=30.0)
 # Telegram signal state
 _telegram_state: dict[str, dict] = {}
 _selected_contract_id: str | None = None
+
+# Rapira cache
+_rapira_cache: dict | None = None
+_rapira_cache_ts: float = 0.0
+_RAPIRA_TTL = 10.0  # seconds
 
 _SIGNAL_LEVELS = [0.5, 1.0, 1.5]
 _SIGNAL_COOLDOWN_MS = 5 * 60 * 1000  # 5 minutes
@@ -536,6 +541,69 @@ def _get_moex_series(contract_id: str, moex_symbol: str, timeframe: str, from_ms
     if database.has_alor_candles(contract_id, clean_symbol, timeframe):
         return database.get_alor_candles_recent(contract_id, clean_symbol, timeframe, from_ms=from_ms, limit=limit)
     return database.get_candles_recent(contract_id, "moex", moex_symbol, timeframe, from_ms=from_ms, limit=limit)
+
+
+# ---------------------------------------------------------------------------
+# API endpoints — Health
+# ---------------------------------------------------------------------------
+@app.get("/api/health")
+def health_check():
+    """Check DB, Alor token and Hyperliquid API availability."""
+    import time as _time
+    result = {
+        "status": "ok",
+        "checks": {},
+        "timestamp": int(_time.time()),
+    }
+
+    # 1. Database
+    try:
+        contracts = database.get_contracts()
+        result["checks"]["database"] = {
+            "status": "ok",
+            "detail": f"{len(contracts)} contract(s)",
+        }
+    except Exception as exc:
+        result["checks"]["database"] = {"status": "error", "detail": str(exc)}
+        result["status"] = "degraded"
+
+    # 2. Alor token
+    try:
+        jwt = alor_client._get_jwt()
+        if jwt:
+            result["checks"]["alor_token"] = {
+                "status": "ok",
+                "detail": "JWT valid",
+            }
+        else:
+            result["checks"]["alor_token"] = {
+                "status": "error",
+                "detail": "Empty JWT",
+            }
+            result["status"] = "degraded"
+    except Exception as exc:
+        result["checks"]["alor_token"] = {"status": "error", "detail": str(exc)}
+        result["status"] = "degraded"
+
+    # 3. Hyperliquid API
+    try:
+        hl_data = hl_client._post({"type": "allMids"})
+        if hl_data and isinstance(hl_data, dict) and len(hl_data) > 0:
+            result["checks"]["hl_api"] = {
+                "status": "ok",
+                "detail": "API reachable",
+            }
+        else:
+            result["checks"]["hl_api"] = {
+                "status": "error",
+                "detail": "Empty or invalid response",
+            }
+            result["status"] = "degraded"
+    except Exception as exc:
+        result["checks"]["hl_api"] = {"status": "error", "detail": str(exc)}
+        result["status"] = "degraded"
+
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -1425,6 +1493,24 @@ def get_funding_analytics(contract_id: str):
     }
     _API_CACHE.set(cache_key, result, ttl=300.0)
     return result
+
+
+# ---------------------------------------------------------------------------
+# API endpoints — Rapira USDT/RUB
+# ---------------------------------------------------------------------------
+@app.get("/api/rapira/usdt-rub")
+def get_rapira_usdt_rub():
+    """Return latest Rapira USDT/RUB spot price."""
+    global _rapira_cache, _rapira_cache_ts
+    now = time.time()
+    if _rapira_cache is not None and now - _rapira_cache_ts < _RAPIRA_TTL:
+        return _rapira_cache
+    data = rapira_client.fetch_usdt_rub()
+    if data is None:
+        raise HTTPException(status_code=503, detail="Rapira unavailable")
+    _rapira_cache = data
+    _rapira_cache_ts = now
+    return data
 
 
 # ---------------------------------------------------------------------------
