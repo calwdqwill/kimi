@@ -185,10 +185,19 @@
   <div class="chart-section">
     <div class="chart-header">
       <div class="chart-title">&#9640; SPREAD TIMELINE</div>
-      <div class="chart-modes" id="chartModes">
-        <button class="chart-mode-btn active" data-mode="spread%">Spread %</button>
-        <button class="chart-mode-btn" data-mode="prices">Prices</button>
-        <button class="chart-mode-btn" data-mode="zscore">Z-Score</button>
+      <div class="chart-controls">
+        <div class="chart-range-select" id="chartRangeSelect">
+          <button class="range-select-btn active" data-range="all">All</button>
+          <button class="range-select-btn" data-range="7d">7D</button>
+          <button class="range-select-btn" data-range="3d">3D</button>
+          <button class="range-select-btn" data-range="1d">1D</button>
+        </div>
+        <div class="chart-modes" id="chartModes">
+          <button class="chart-mode-btn active" data-mode="spread%">Spread %</button>
+          <button class="chart-mode-btn" data-mode="prices">Prices</button>
+          <button class="chart-mode-btn" data-mode="zscore">Z-Score</button>
+        </div>
+        <button class="chart-export-btn" id="chartExportBtn" title="Export CSV">CSV</button>
       </div>
     </div>
     <div class="chart-wrap">
@@ -608,6 +617,6 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-<script src="/static/app.js?v=websocket1"></script>
+<script src="/static/app.js?v=techdebt1"></script>
 </body>
 </html>

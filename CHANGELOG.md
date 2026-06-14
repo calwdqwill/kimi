@@ -18,6 +18,25 @@
 
 ---
 
+## 2026-06-12 — Tech Debt Cleanup V4.2
+
+### Frontend
+- **`frontend/index.html`** — добавлены:
+  - Range selector: `All | 7D | 3D | 1D` для графика
+  - Кнопка `CSV` для экспорта исторических данных
+- **`frontend/app.js`**:
+  - `setChartRange()` — фильтрация графика по выбранному диапазону
+  - `exportSpreadCsv()` — экспорт спреда, цен, Z-Score в CSV
+  - `getContractTabLabel()` — вкладки контрактов теперь вида "Brent Jul 2026" с точной датой экспирации
+  - `moexHoursPlugin` — визуализация выходных и ночного закрытия MOEX на графике
+- **`frontend/style.css`** — стили для range selector, export button и обновлённых contract tabs
+
+### DevOps
+- **`.github/workflows/deploy.yml`** — GitHub Actions workflow для автодеплоя при push в `V2.0_prod`
+- **Удалены временные ad-hoc скрипты** из корня проекта и `backend/`: `check_*.py`, `merge_*.py`, `deploy_*.py`, `fix_*.py`, `patch_main.py`, `test_*.py`, одноразовые `.html`/`.json`/`.txt` файлы
+
+---
+
 ## 2026-06-12 — WebSocket Real-Time V4.1
 
 ### Backend

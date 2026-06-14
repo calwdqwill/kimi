@@ -396,7 +396,8 @@ const FUTURES_MONTH_NUM = {
   M: '06', N: '07', Q: '08', U: '09', V: '10', X: '11', Z: '12'
 };
 
-function getContractTabLabel(name) {
+function getContractTabLabel(contract) {
+  const name = contract.name;
   if (!name || name === 'TEST') return name;
   const m = name.match(/([A-Z])(\d)$/);
   if (!m) return name;
@@ -404,7 +405,25 @@ function getContractTabLabel(name) {
   const monthName = FUTURES_MONTH_MAP[letter];
   const monthNum = FUTURES_MONTH_NUM[letter];
   if (!monthName) return name;
-  return `<div class="tab-label-wrap"><div class="tab-month">${monthName}</div><div class="tab-expiry">экс: 01.${monthNum}</div></div>`;
+
+  const asset = state.assets[contract.asset] || {};
+  const assetShort = (asset.name || contract.asset).split(' ')[0];
+
+  let year, expiryDate;
+  if (contract.asset === 'brent' && contract.contract_year) {
+    year = contract.contract_year;
+    const lastDay = new Date(year, parseInt(monthNum, 10), 0).getDate();
+    expiryDate = `${lastDay}.${monthNum}.${year}`;
+  } else if (contract.contract_start_date) {
+    const d = new Date(contract.contract_start_date + 'T00:00:00Z');
+    year = d.getUTCFullYear();
+    expiryDate = `${String(d.getUTCDate()).padStart(2, '0')}.${String(d.getUTCMonth() + 1).padStart(2, '0')}.${year}`;
+  } else {
+    year = '20' + m[2];
+    expiryDate = `01.${monthNum}.${year}`;
+  }
+
+  return `<div class="tab-label-wrap"><div class="tab-asset">${assetShort} ${monthName} ${year}</div><div class="tab-expiry">экс: ${expiryDate}</div></div>`;
 }
 
 // =============================================================================
@@ -417,7 +436,7 @@ function renderContractTabs() {
   assetContracts.forEach(c => {
     const btn = document.createElement('button');
     btn.className = 'contract-tab' + (c.id === state.activeContract ? ' active' : '');
-    const label = getContractTabLabel(c.name);
+    const label = getContractTabLabel(c);
     if (c.is_active && c.id === state.activeContract) {
       btn.innerHTML = label + '<span class="tab-dot"></span>';
     } else {
@@ -459,6 +478,7 @@ document.querySelectorAll('.tf-btn').forEach(btn => {
     state.activeTf = btn.dataset.tf;
     sendWsSubscribe();
     refreshAll();
+    updateRangeSelectUI('all');
   });
 });
 
@@ -473,6 +493,97 @@ document.querySelectorAll('.chart-mode-btn').forEach(btn => {
     updateChart();
   });
 });
+
+// =============================================================================
+// CHART RANGE SELECTOR
+// =============================================================================
+function getCandlesPerDay(tf) {
+  if (tf === '5m') return 24 * 12;
+  if (tf === '15m') return 24 * 4;
+  if (tf === '60m') return 24;
+  return 24 * 4;
+}
+
+function setChartRange(range) {
+  const cache = getCurrentCache();
+  const data = cache ? cache.historicalData : [];
+  if (!data || !data.length) return;
+  const total = data.length;
+  const candlesPerDay = getCandlesPerDay(state.activeTf);
+  let visible;
+  switch (range) {
+    case '7d': visible = 7 * candlesPerDay; break;
+    case '3d': visible = 3 * candlesPerDay; break;
+    case '1d': visible = 1 * candlesPerDay; break;
+    case 'all':
+    default:
+      visible = total;
+  }
+  visible = Math.min(total, Math.max(MIN_VISIBLE_POINTS, visible));
+  state.rangeEnd = total - 1;
+  state.rangeStart = Math.max(0, state.rangeEnd - visible + 1);
+  setRangeState(state.activeContract, state.rangeStart, state.rangeEnd);
+  updateRangeSelectUI(range);
+  updateSliderUI();
+  updateChart();
+}
+
+function updateRangeSelectUI(activeRange) {
+  document.querySelectorAll('.range-select-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.range === activeRange);
+  });
+}
+
+document.querySelectorAll('.range-select-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    setChartRange(btn.dataset.range);
+  });
+});
+
+// =============================================================================
+// CHART CSV EXPORT
+// =============================================================================
+function exportSpreadCsv() {
+  const cache = getCurrentCache();
+  if (!cache || !cache.historicalData || !cache.historicalData.length) {
+    alert('Нет данных для экспорта');
+    return;
+  }
+  const hist = cache.historicalData;
+  const prices = cache.pricesData || [];
+  const zscore = cache.zscoreData || [];
+
+  const priceMap = new Map(prices.map(p => [p.timestamp_ms, p]));
+  const zMap = new Map(zscore.map(z => [z.timestamp_ms, z]));
+
+  const rows = hist.map(h => {
+    const p = priceMap.get(h.timestamp_ms) || {};
+    const z = zMap.get(h.timestamp_ms) || {};
+    const ts = new Date(h.timestamp_ms);
+    return {
+      timestamp: ts.toISOString().slice(0, 16).replace('T', ' '),
+      spread_pct: h.spread_pct,
+      mean: h.mean,
+      plus_2sigma: h.plus_2sigma,
+      minus_2sigma: h.minus_2sigma,
+      moex_close: p.moex_close ?? '',
+      hl_close: p.hl_close ?? '',
+      zscore: z.zscore ?? '',
+    };
+  });
+
+  const headers = ['timestamp', 'spread_pct', 'mean', 'plus_2sigma', 'minus_2sigma', 'moex_close', 'hl_close', 'zscore'];
+  const csv = [headers.join(','), ...rows.map(r => headers.map(h => JSON.stringify(r[h] ?? '')).join(','))].join('\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `brentoil_spread_${state.activeContract}_${state.activeTf}_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+document.getElementById('chartExportBtn')?.addEventListener('click', exportSpreadCsv);
 
 // =============================================================================
 // TABLE TABS
@@ -501,6 +612,50 @@ document.querySelectorAll('.table-tab').forEach(tab => {
     }
   });
 });
+
+// =============================================================================
+// MOEX HOURS VISUALIZATION PLUGIN
+// =============================================================================
+const moexHoursPlugin = {
+  id: 'moexHours',
+  beforeDatasetsDraw(chart) {
+    const { ctx, chartArea: { top, bottom }, scales: { x } } = chart;
+    const cache = getCurrentCache();
+    if (!cache || !cache.historicalData || !cache.historicalData.length) return;
+
+    const MSK_OFFSET_MS = 3 * 60 * 60 * 1000;
+    const data = cache.historicalData;
+
+    for (let i = 0; i < data.length; i++) {
+      const row = data[i];
+      const msk = new Date(row.timestamp_ms + MSK_OFFSET_MS);
+      const day = msk.getUTCDay();
+      const hour = msk.getUTCHours();
+      const minute = msk.getUTCMinutes();
+      const isWeekend = day === 0 || day === 6;
+      const isNight = (hour > 23 || (hour === 23 && minute >= 50)) || (hour < 10);
+      if (!isWeekend && !isNight) continue;
+
+      const xPos = x.getPixelForValue(row.timestamp_ms);
+      let width;
+      if (i < data.length - 1) {
+        const nextX = x.getPixelForValue(data[i + 1].timestamp_ms);
+        width = Math.max(1, nextX - xPos);
+      } else {
+        width = 4;
+      }
+
+      if (isWeekend) {
+        ctx.fillStyle = 'rgba(239, 68, 68, 0.06)';
+      } else {
+        ctx.fillStyle = 'rgba(100, 116, 139, 0.04)';
+      }
+      ctx.fillRect(xPos, top, width, bottom - top);
+    }
+  }
+};
+
+Chart.register(moexHoursPlugin);
 
 // =============================================================================
 // CHART.JS SETUP (no zoom plugin - using custom range slider)
@@ -709,10 +864,12 @@ function initRangeSlider() {
     state.rangeEnd = data.length - 1;
     state.rangeStart = 0;
     setRangeState(state.activeContract, 0, data.length - 1);
+    updateRangeSelectUI('all');
   } else {
     state.rangeStart = rs.rangeStart;
     state.rangeEnd = Math.min(data.length - 1, rs.rangeEnd);
     setRangeState(state.activeContract, state.rangeStart, state.rangeEnd);
+    updateRangeSelectUI('all');
   }
   updateSliderUI();
 }

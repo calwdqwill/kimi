@@ -388,7 +388,8 @@ body {
   line-height: 1.25;
 }
 
-.tab-month {
+.tab-month,
+.tab-asset {
   font-size: 12px;
   font-weight: 500;
 }
@@ -677,6 +678,60 @@ body {
   align-items: center;
   justify-content: space-between;
   margin-bottom: 10px;
+}
+
+.chart-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.chart-range-select {
+  display: flex;
+  gap: 2px;
+}
+
+.range-select-btn {
+  padding: 4px 10px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--text-muted);
+  background: transparent;
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.range-select-btn:hover {
+  color: var(--text-secondary);
+  border-color: var(--border-hover);
+}
+
+.range-select-btn.active {
+  color: var(--accent-cyan);
+  background: rgba(34, 211, 238, 0.08);
+  border-color: rgba(34, 211, 238, 0.3);
+}
+
+.chart-export-btn {
+  padding: 4px 10px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: transparent;
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.chart-export-btn:hover {
+  color: var(--accent-blue);
+  border-color: var(--accent-blue);
+  background: var(--accent-blue-dim);
 }
 
 .chart-title {
