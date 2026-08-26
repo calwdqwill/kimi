@@ -4,15 +4,35 @@ __pycache__/
 *$py.class
 *.so
 .env
+.env.*
+!.env.example
 .venv/
 venv/
 
 # Logs
 *.log
 
-# Database
-data/*.db
+# Database & data
+data/
 
 # IDE
 .vscode/
 .idea/
+
+# Ad-hoc / local-only scripts
+scripts/check_*.py
+scripts/debug_*.py
+scripts/fix_*.py
+scripts/rebuild_*.py
+scripts/test_*.py
+scripts/find_env.py
+scripts/final_check.py
+scripts/cat_nginx.py
+
+# Legacy deploy helpers / local credentials
+upload_main.py
+update_contracts.py
+reload_brm6.py
+test.py
+deploy/deploy.sh
+deploy/systemd/mo-ex.service
