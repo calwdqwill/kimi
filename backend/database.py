@@ -377,13 +377,13 @@ def init_db() -> None:
                 cur.execute(
                     _placeholder(
                         """
-                        UPDATE contracts SET asset = ?, contract_month = ?, contract_year = ?, contract_start_date = ?
+                        UPDATE contracts SET asset = ?, contract_month = ?, contract_year = ?, contract_start_date = ?, is_active = ?
                         WHERE id = ?
                         """
                     ),
                     (
                         c.get("asset", "brent"), c.get("contract_month", 0), c.get("contract_year", 0),
-                        c.get("contract_start_date"), c["id"],
+                        c.get("contract_start_date"), 1 if c.get("is_active") else 0, c["id"],
                     ),
                 )
             conn.commit()
