@@ -315,3 +315,29 @@
 ### Infrastructure
 - V1_prod — первая стабильная ветка
 - Деплой через paramiko SSH + `git pull` + `systemctl restart dashboard`
+
+
+## 2026-08-26 — Mean-Reversion Backtest Engine V4.3
+
+### Backend
+- **`backend/domain/backtest.py`** — новый движок бэктеста mean-reversion спред-стратегии:
+  - Long spread при Z ≤ -entry_z, short spread при Z ≥ +entry_z.
+  - Выход при возврате к среднему (|Z| ≤ exit_z), stop-loss при |Z| ≥ stop_z, hard time-stop max_hold.
+  - Rolling mean/stddev с окном lookback.
+  - Учёт комиссий MOEX/HL и проскальзывания.
+  - Метрики: P&L, winrate, avg trade, best/worst, max drawdown, Sharpe.
+- **`backend/main.py`** — новые endpoints:
+  - `POST /api/backtest/{contract_id}/{timeframe}` — одиночный прогон.
+  - `POST /api/backtest/optimize/{contract_id}/{timeframe}` — grid-search по параметрам.
+
+### Deploy
+- Задеплоено на сервер `2.25.143.143` в Docker Compose.
+
+### Первые результаты
+- **BRU6 5m, дефолтные параметры:** -712$, winrate 41%, Sharpe -0.46.
+- **BRU6 5m, оптимизированные параметры:** +825$, winrate 73%, Sharpe 0.65, max DD 295$.
+
+### Housekeeping
+- Очищены untracked ad-hoc скрипты и legacy deploy-файлы.
+- Обновлён `.gitignore`.
+

@@ -1,60 +1,52 @@
-# Текущая задача — Docker-контейнер + PostgreSQL V4.0
+# Текущая задача — Mean-Reversion Backtest Engine V4.3
 
-**Дата:** 2026-06-11  
+**Дата:** 2026-08-26  
 **Ветка:** `V2.0_prod`  
-**Статус:** 🔄 В процессе — код готов, ожидается деплой на сервер
+**Статус:** 🔄 В процессе — движок готов, задеплоен, нужен UI и дальнейшая проверка на всех активах
 
 ---
 
 ## Что делаем
-Docker-контейнеризация проекта `mo-ex.online` с тремя сервисами:
-1. `backend` — FastAPI/uvicorn (порт `8001`).
-2. `frontend` — nginx со статикой (порт `8080` на хосте для тестов).
-3. `db` — PostgreSQL 16 в именованном volume.
-
-Так как БД выносится в отдельный контейнер, параллельно выполняется миграция с SQLite на PostgreSQL.
+Строим и проверяем алгоритм торговли на схождение/расхождение спреда между MOEX и Hyperliquid:
+- backtest endpoint, который проигрывает историю и считает P&L / winrate / max drawdown / Sharpe;
+- optimize endpoint, который подбирает параметры по сетке;
+- на основе результатов — улучшить paper trading и сигналы.
 
 ---
 
 ## Что сделано
 
-### Backend
-- `requirements.txt` — добавлен `psycopg2-binary`.
-- `backend/config.py` — добавлена поддержка `DATABASE_URL` и авто-сборка URL из `POSTGRES_*`.
-- `backend/database.py` — переписан для работы с SQLite **и** PostgreSQL:
-  - единый слой с `_placeholder()` для `?` / `%s`;
-  - `ON CONFLICT` вместо `INSERT OR IGNORE/REPLACE`;
-  - `RETURNING id` для PostgreSQL;
-  - сохранён SQLite fallback.
-- `backend/backup.py` — теперь делает `pg_dump` для Postgres или копирует SQLite-файл.
+### Backtest engine (`backend/domain/backtest.py`)
+- Модель mean-reversion: long spread при Z ≤ -entry_z, short spread при Z ≥ +entry_z.
+- Выход при возврате к среднему (|Z| ≤ exit_z), stop-loss при |Z| ≥ stop_z, hard time-stop после max_hold свечей.
+- Rolling mean/stddev с окном lookback.
+- Учёт комиссий и проскальзывания на обеих ногах.
+- Метрики: total_pnl, num_trades, winrate, avg_pnl, best/worst trade, max_drawdown, sharpe.
 
-### Docker
-- `Dockerfile` — образ бэкенда (Python 3.12 slim, порт `8001`, healthcheck).
-- `.dockerignore` — исключены секреты, venv, `.git`, данные, ad-hoc скрипты.
-- `frontend/Dockerfile` + `frontend/nginx.conf` — контейнер фронтенда.
-- `docker-compose.yml` — сервисы `db`, `backend`, `frontend`, volume `pgdata`, сеть `moex`.
-
-### Миграция
-- `scripts/migrate_sqlite_to_postgres.py` — переносит все таблицы из `data/dashboard.db` в PostgreSQL с сохранением id и обновлением sequence.
+### API endpoints (`backend/main.py`)
+- `POST /api/backtest/{contract_id}/{timeframe}` — одиночный прогон.
+- `POST /api/backtest/optimize/{contract_id}/{timeframe}` — grid-search оптимизация.
 
 ### Deploy
-- `deploy/nginx/mo-ex` — `/api/`, `/docs`, `/openapi.json` теперь идут на `127.0.0.1:8001`.
-- `deploy/systemd/mo-ex-docker.service` — systemd unit для автозапуска compose.
+- Задеплоено на сервер `2.25.143.143` в Docker.
+- Через SSH-tunnel endpoint'ы отвечают за 2–3 секунды.
 
-### Документация
-- `CHANGELOG.md` — добавлена запись V4.0.
-- `BACKLOG.md` — задачи Docker-контейнер и PostgreSQL отмечены.
+### Первые результаты (BRU6, 5m, ~1 месяц истории)
+- Дефолтные параметры (entry_z=2.0, exit_z=0.5, stop_z=3.0, max_hold=48, lookback=120): **P&L -712$, winrate 41%, sharpe -0.46**.
+- Оптимизированные параметры (entry_z=2.5, exit_z=0.0, stop_z=3.5, max_hold=96, lookback=120): **P&L +825$, winrate 73%, sharpe 0.65, max DD 295$**.
+
+### Репозиторий
+- Убраны ad-hoc скрипты и legacy deploy-файлы из рабочей директории.
+- Обновлён `.gitignore` (data/, скрипты с паролями, legacy deploy).
 
 ---
 
 ## Следующий шаг
-Деплой на сервер `2.25.143.143`:
-1. Передать/обновить `backend/.env` (добавить `POSTGRES_*` + старые токены).
-2. Собрать и запустить `docker compose up -d --build`.
-3. Выполнить миграцию SQLite → PostgreSQL.
-4. Проверить `curl http://localhost:8001/api/health`.
-5. Обновить/перезапустить host nginx.
+1. Проверить бэктест на всех активах и таймфреймах (BRN6, BRQ6, GNU6, S1U6, 15m/60m).
+2. Добавить UI-вкладку для запуска бэктеста и отображения equity curve / trades.
+3. Перенести лучшие параметры в paper trading (или дать ему использовать параметры из optimize).
+4. Рассмотреть улучшения: фильтр по режиму рынка, учёт funding, hedge ratio, асинхронные долгие расчёты.
 
 ---
 
-*Последнее обновление: 2026-06-11*
+*Последнее обновление: 2026-08-26*
