@@ -25,7 +25,7 @@ from config import (
     BASE_DIR, TIMEFRAMES, ZSCORE_WINDOW, DEFAULT_CONTRACTS,
 )
 from clients import alor_client, hl_client, telegram_client, rapira_client
-from domain import sync, spread, zscore, stats as stats_module
+from domain import sync, spread, zscore, stats as stats_module, backtest as backtest_module
 import alor_history
 # Alor history integration active
 
@@ -1711,3 +1711,99 @@ def set_selected_contract(contract_id: str):
     _selected_contract_id = contract_id
     logger.info("Selected contract changed to: %s", contract_id)
     return {"status": "ok", "selected_contract_id": contract_id}
+
+
+# ---------------------------------------------------------------------------
+# API endpoints — Backtest
+# ---------------------------------------------------------------------------
+class BacktestRequest(BaseModel):
+    entry_z: float = 2.0
+    exit_z: float = 0.5
+    stop_z: float = 3.0
+    max_hold: int = 48
+    lookback: int = 120
+    position_size: float = 10000.0
+    moex_fee_pct: float = 0.02
+    hl_fee_pct: float = 0.035
+    slippage_pct: float = 0.03
+
+
+class BacktestOptimizeRequest(BaseModel):
+    entry_z: list[float] = [1.5, 2.0, 2.5, 3.0]
+    exit_z: list[float] = [0.0, 0.3, 0.5, 1.0]
+    stop_z: list[float] = [2.5, 3.0, 3.5, 4.0]
+    max_hold: list[int] = [24, 48, 72, 96]
+    lookback: list[int] = [60, 120, 240]
+    position_size: float = 10000.0
+    objective: str = "sharpe"
+
+
+def _load_synced_for_backtest(contract_id: str, timeframe: str) -> list[dict]:
+    """Load synchronized MOEX + HL close series for backtesting."""
+    contract = database.get_contract(contract_id)
+    if not contract:
+        raise HTTPException(status_code=404, detail="Contract not found")
+
+    moex_symbol = contract["moex_symbol"]
+    hl_coin = contract["hl_coin"]
+    clean_sym = moex_symbol.split("@")[0]
+
+    if database.has_alor_candles(contract_id, clean_sym, timeframe):
+        moex = database.get_alor_candles(contract_id, clean_sym, timeframe, limit=10000)
+        hl = database.get_candles_recent(contract_id, "hyperliquid", hl_coin, timeframe, limit=10000)
+    else:
+        start_ms = _contract_start_ms(contract)
+        moex = database.get_candles_recent(contract_id, "moex", moex_symbol, timeframe, from_ms=start_ms, limit=10000)
+        hl = database.get_candles_recent(contract_id, "hyperliquid", hl_coin, timeframe, from_ms=start_ms, limit=10000)
+
+    # Normalize alor candles to same shape as legacy candles
+    moex_normalized = [
+        {"timestamp_ms": row["timestamp_ms"], "close": row["close"]} for row in moex
+    ]
+    return sync.strict_sync(moex_normalized, hl)
+
+
+@app.post("/api/backtest/{contract_id}/{timeframe}")
+def run_backtest_endpoint(contract_id: str, timeframe: str, req: BacktestRequest):
+    """Run a single mean-reversion backtest for a contract/timeframe."""
+    if timeframe not in TIMEFRAMES:
+        raise HTTPException(status_code=400, detail="Unsupported timeframe")
+
+    synced = _load_synced_for_backtest(contract_id, timeframe)
+    if not synced:
+        raise HTTPException(status_code=400, detail="No synchronized historical data for backtest")
+
+    params = backtest_module.BacktestParams(
+        entry_z=req.entry_z,
+        exit_z=req.exit_z,
+        stop_z=req.stop_z,
+        max_hold=req.max_hold,
+        lookback=req.lookback,
+        position_size=req.position_size,
+        moex_fee_pct=req.moex_fee_pct,
+        hl_fee_pct=req.hl_fee_pct,
+        slippage_pct=req.slippage_pct,
+    )
+    result = backtest_module.run_backtest(synced, params)
+    return backtest_module.result_to_dict(result, include_equity=True)
+
+
+@app.post("/api/backtest/optimize/{contract_id}/{timeframe}")
+def optimize_backtest_endpoint(contract_id: str, timeframe: str, req: BacktestOptimizeRequest):
+    """Grid-search optimize mean-reversion parameters for a contract/timeframe."""
+    if timeframe not in TIMEFRAMES:
+        raise HTTPException(status_code=400, detail="Unsupported timeframe")
+
+    synced = _load_synced_for_backtest(contract_id, timeframe)
+    if not synced:
+        raise HTTPException(status_code=400, detail="No synchronized historical data for backtest")
+
+    param_grid = {
+        "entry_z": req.entry_z,
+        "exit_z": req.exit_z,
+        "stop_z": req.stop_z,
+        "max_hold": req.max_hold,
+        "lookback": req.lookback,
+        "position_size": [req.position_size],
+    }
+    return backtest_module.optimize_backtest(synced, param_grid, objective=req.objective)
