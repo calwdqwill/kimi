@@ -6,6 +6,8 @@
 
 - [x] Alor клиент + миграция БД (Finam → Alor)
 - [x] **Mean-reversion backtest + optimize endpoints (V4.3)** — серверный бэктест и grid-search оптимизация параметров спред-стратегии
+- [x] **Проверка бэктеста на всех активах** — 15m/60m показывают сильные результаты, 5m заблокирован gaps в strict_sync
+- [x] **Добавление новых контрактов** — BRV6-X-Z, BRG-H-J7, GNZ6/H7/M7, S1Z6/H7/M7
 - [x] Prices-вкладка (MOEX Close + HL Close)
 - [x] Бэкап SQLite + systemd timer
 - [x] Cloudflare + домен `mo-ex.online`

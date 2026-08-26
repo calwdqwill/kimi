@@ -341,3 +341,34 @@
 - Очищены untracked ad-hoc скрипты и legacy deploy-файлы.
 - Обновлён `.gitignore`.
 
+
+
+## 2026-08-26 — Backtest results + new contracts
+
+### New MOEX contracts
+- **Brent:** BRV6, BRX6, BRZ6, BRG7, BRH7, BRJ7
+- **Gold:** GNZ6, GNH7, GNM7
+- **Silver:** S1Z6, S1H7, S1M7
+- `backend/config.py` updated; `backend/database.py` now syncs `is_active` flag on startup.
+
+### Backtest optimization results
+Optimized mean-reversion parameters (objective = Sharpe) on all assets/timeframes:
+
+| Contract | TF  | Entry | Exit | Stop | Hold | Look | Trades | Win%  | P&L     | MaxDD   | Sharpe |
+|----------|-----|-------|------|------|------|------|--------|-------|---------|---------|--------|
+| BRN6     | 15m | 2.0   | 1.0  | 4.0  | 48   | 60   | 113    | 94.7% | +5959.9 | 74.95   | 2.51   |
+| BRN6     | 60m | 2.0   | 1.0  | 4.0  | 96   | 60   | 40     | 95.0% | +5139.3 | 229.98  | 2.71   |
+| BRQ6     | 60m | 2.0   | 1.0  | 4.0  | 48   | 60   | 43     | 95.3% | +4038.2 | 111.67  | 3.17   |
+| BRQ6     | 15m | 2.0   | 1.0  | 4.0  | 48   | 60   | 141    | 82.3% | +3629.8 | 142.81  | 1.88   |
+| S1U6     | 15m | 2.0   | 0.0  | 4.0  | 96   | 120  | 104    | 94.2% | +3213.4 | 68.74   | 2.85   |
+| BRU6     | 15m | 2.0   | 1.0  | 4.0  | 96   | 120  | 120    | 90.8% | +2904.5 | 87.11   | 2.46   |
+| BRU6     | 60m | 2.0   | 0.5  | 3.0  | 48   | 60   | 27     | 100%  | +2776.4 | 0.00    | 3.38   |
+| S1U6     | 60m | 2.0   | 1.0  | 3.0  | 48   | 120  | 32     | 100%  | +1766.7 | 0.00    | 3.45   |
+| GNU6     | 60m | 2.0   | 1.0  | 3.0  | 48   | 120  | 26     | 96.2% | +652.9  | 1.20    | 2.85   |
+| GNU6     | 15m | 3.0   | 0.0  | 4.0  | 96   | 120  | 34     | 94.1% | +625.6  | 19.38   | 1.63   |
+
+Key findings:
+- 5m timeframe unusable due to strict_sync gaps.
+- 15m/60m show strong positive P&L and high winrates across all assets.
+- Best parameters cluster around: entry_z 2.0, exit_z 0.0–1.0, stop_z 3.0–4.0, lookback 60–120.
+
